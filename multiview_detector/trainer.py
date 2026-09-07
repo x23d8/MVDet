@@ -84,7 +84,10 @@ class PerspectiveTrainer(BaseTrainer):
             epoch, len(data_loader), losses / len(data_loader), precision_s.avg * 100, recall_s.avg * 100, t_epoch))
 
         self.last_train_metrics = {
-            'loss': losses / len(data_loader),
+            # 'epoch_avg_loss' (not 'loss') to match the key MVDeTr logs
+            # (Nhutan410/MVDeTr) for the same metric, so both models' curves
+            # land on the same wandb chart instead of two separate ones.
+            'epoch_avg_loss': losses / len(data_loader),
             'precision_percent': precision_s.avg * 100,
             'recall_percent': recall_s.avg * 100,
             'duration_seconds': t_epoch,
@@ -182,14 +185,22 @@ class PerspectiveTrainer(BaseTrainer):
             losses / len(data_loader), precision_s.avg * 100, recall_s.avg * 100, t_epoch))
 
         self.last_test_metrics = {
-            'loss': losses / len(data_loader),
+            # Keys below (epoch_avg_loss/moda/modp/precision/recall) are named
+            # to match Nhutan410/MVDeTr's trainer.py exactly, so a run from
+            # either repo lands on the same wandb chart for the same key.
+            # 'grid_precision_percent'/'grid_recall_percent' have no MVDeTr
+            # counterpart (per-cell classification, not the evaluate() output)
+            # so they keep their own name and simply won't overlay -- that's
+            # expected, not a bug.
+            'epoch_avg_loss': losses / len(data_loader),
             'grid_precision_percent': precision_s.avg * 100,
             'grid_recall_percent': recall_s.avg * 100,
-            'moda_percent': moda,
-            'modp_percent': modp,
-            'detection_precision_percent': detection_precision,
-            'detection_recall_percent': detection_recall,
-            'duration_seconds': t_epoch,
+            'moda': moda,
+            'modp': modp,
+            'precision': detection_precision,
+            'recall': detection_recall,
+            # 'time_sec' (not 'duration_seconds') to match MVDeTr's eval-time key
+            'time_sec': t_epoch,
         }
 
         return losses / len(data_loader), precision_s.avg * 100, moda

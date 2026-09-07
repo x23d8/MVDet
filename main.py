@@ -81,6 +81,10 @@ def init_wandb(args, model, train_set, test_set, logdir):
         entity=WANDB_ENTITY,
         project=WANDB_PROJECT,
         name=run_name,
+        # group by dataset, same convention as Nhutan410/MVDeTr, so the wandb
+        # Runs sidebar groups Wildtrack/MultiviewX runs the same way across
+        # both models' repos.
+        group=args.dataset,
         job_type=job_type,
         config=config,
         dir=logdir,
@@ -88,7 +92,9 @@ def init_wandb(args, model, train_set, test_set, logdir):
         tags=[args.dataset, args.variant, args.arch],
     )
     run.define_metric('epoch')
-    for namespace in ('train/*', 'validation/*', 'final_test/*', 'gpu/*'):
+    # 'test/*' (renamed from 'validation/*') matches the namespace Nhutan410/MVDeTr
+    # logs its per-epoch eval under, so both models' curves share one chart.
+    for namespace in ('train/*', 'test/*', 'final_test/*', 'gpu/*'):
         run.define_metric(namespace, step_metric='epoch')
     return run
 
@@ -128,7 +134,8 @@ def log_phase(run, phase, epoch, metrics, optimizer=None):
     payload.update({f'{phase}/{key}': value for key, value in metrics.items()})
     payload.update(gpu_metrics())
     if optimizer is not None:
-        payload['train/learning_rate'] = optimizer.param_groups[0]['lr']
+        # bare 'lr' (not 'train/learning_rate') to match the key Nhutan410/MVDeTr logs
+        payload['lr'] = optimizer.param_groups[0]['lr']
     run.log(payload)
 
     gpu_text = ', '.join(
@@ -224,7 +231,7 @@ def main(args):
             print('Testing before training...')
             reset_peak_gpu_memory()
             trainer.test(test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, True)
-            log_phase(wandb_run, 'validation', 0, trainer.last_test_metrics)
+            log_phase(wandb_run, 'test', 0, trainer.last_test_metrics)
 
             for epoch in tqdm.tqdm(range(1, args.epochs + 1)):
                 print('Training...')
@@ -236,7 +243,7 @@ def main(args):
                 reset_peak_gpu_memory()
                 test_loss, test_prec, moda = trainer.test(test_loader, os.path.join(logdir, 'test.txt'),
                                                           train_set.gt_fpath, True)
-                log_phase(wandb_run, 'validation', epoch, trainer.last_test_metrics)
+                log_phase(wandb_run, 'test', epoch, trainer.last_test_metrics)
 
                 x_epoch.append(epoch)
                 train_loss_s.append(train_loss)

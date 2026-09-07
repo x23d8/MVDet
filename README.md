@@ -93,5 +93,13 @@ CUDA_VISIBLE_DEVICES=0,1 python main.py -d multiviewx
 ``` 
 This should automatically return evaluation results similar to the reported 88.2\% MODA on Wildtrack dataset. 
 
+The per-epoch eval metrics are logged under `test/moda`, `test/modp`, `test/precision`,
+`test/recall`, `test/epoch_avg_loss`, `test/time_sec` (namespace `test/*`, not `validation/*`),
+train loss under `train/epoch_avg_loss`, and learning rate under the bare key `lr` — matching the
+key names used by [`Nhutan410/MVDeTr`](https://github.com/Nhutan410/MVDeTr)'s wandb logging, so runs
+from both repos plot on the same chart in the shared `baseline-expriments` project. Metrics with no
+MVDeTr equivalent (`train/precision_percent`, `test/grid_precision_percent`, `gpu/*`, `final_test/*`)
+keep their own names and simply won't overlay with MVDeTr runs — that's expected.
+
 ### Pre-trained models
 You can download the checkpoints at this [link](https://1drv.ms/u/s!AtzsQybTubHfhNRE9Iy8IjsGMXB17A?e=CCqhIQ).
