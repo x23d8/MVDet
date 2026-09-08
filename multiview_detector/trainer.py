@@ -18,10 +18,12 @@ class BaseTrainer(object):
 
 
 class PerspectiveTrainer(BaseTrainer):
-    def __init__(self, model, criterion, logdir, denormalize, cls_thres=0.4, alpha=1.0):
+    def __init__(self, model, criterion, logdir, denormalize, cls_thres=0.4, alpha=1.0,
+                 view_criterion=None):
         super(BaseTrainer, self).__init__()
         self.model = model
         self.criterion = criterion
+        self.view_criterion = view_criterion if view_criterion is not None else criterion
         self.cls_thres = cls_thres
         self.logdir = logdir
         self.denormalize = denormalize
@@ -29,10 +31,46 @@ class PerspectiveTrainer(BaseTrainer):
         self.last_train_metrics = {}
         self.last_test_metrics = {}
 
+    def _map_probability(self, map_result):
+        if getattr(self.criterion, 'outputs_logits', False):
+            return torch.sigmoid(map_result)
+        return map_result
+
+    def _compute_loss(self, map_result, images_result, map_gt, images_gt, dataset):
+        view_loss = map_result.new_zeros(())
+        for image_result, image_gt in zip(images_result, images_gt):
+            view_loss = view_loss + self.view_criterion(
+                image_result,
+                image_gt.to(image_result.device),
+                dataset.img_kernel,
+            )
+        view_loss = view_loss / max(len(images_gt), 1)
+
+        map_target = map_gt.to(map_result.device)
+        if getattr(self.criterion, 'requires_multiview_context', False):
+            core_model = getattr(self.model, 'module', self.model)
+            map_loss = self.criterion(
+                map_result,
+                map_target,
+                dataset.map_kernel,
+                view_predictions=images_result,
+                projection_matrices=core_model.proj_mats,
+            )
+        else:
+            map_loss = self.criterion(map_result, map_target, dataset.map_kernel)
+        return map_loss + self.alpha * view_loss, map_loss, view_loss
+
+    def _update_criterion_metrics(self, meters):
+        for name, value in getattr(self.criterion, 'last_stats', {}).items():
+            meters.setdefault(name, AverageMeter()).update(value)
+
     def train(self, epoch, data_loader, optimizer, log_interval=100, cyclic_scheduler=None):
         self.model.train()
+        if hasattr(self.criterion, 'set_epoch'):
+            self.criterion.set_epoch(epoch)
         losses = 0
         precision_s, recall_s = AverageMeter(), AverageMeter()
+        criterion_metrics = {}
         t0 = time.time()
         t_b = time.time()
         t_forward = 0
@@ -42,15 +80,15 @@ class PerspectiveTrainer(BaseTrainer):
             map_res, imgs_res = self.model(data)
             t_f = time.time()
             t_forward += t_f - t_b
-            loss = 0
-            for img_res, img_gt in zip(imgs_res, imgs_gt):
-                loss += self.criterion(img_res, img_gt.to(img_res.device), data_loader.dataset.img_kernel)
-            loss = self.criterion(map_res, map_gt.to(map_res.device), data_loader.dataset.map_kernel) + \
-                   loss / len(imgs_gt) * self.alpha
+            loss, _, _ = self._compute_loss(
+                map_res, imgs_res, map_gt, imgs_gt, data_loader.dataset
+            )
             loss.backward()
             optimizer.step()
             losses += loss.item()
-            pred = (map_res > self.cls_thres).int().to(map_gt.device)
+            self._update_criterion_metrics(criterion_metrics)
+            map_probability = self._map_probability(map_res)
+            pred = (map_probability > self.cls_thres).int().to(map_gt.device)
             true_positive = (pred.eq(map_gt) * pred.eq(1)).sum().item()
             false_positive = pred.sum().item() - true_positive
             false_negative = map_gt.sum().item() - true_positive
@@ -74,7 +112,8 @@ class PerspectiveTrainer(BaseTrainer):
                 print('Train Epoch: {}, Batch:{}, Loss: {:.6f}, '
                       'prec: {:.1f}%, recall: {:.1f}%, Time: {:.1f} (f{:.3f}+b{:.3f}), maxima: {:.3f}'.format(
                     epoch, (batch_idx + 1), losses / (batch_idx + 1), precision_s.avg * 100, recall_s.avg * 100,
-                    t_epoch, t_forward / (batch_idx + 1), t_backward / (batch_idx + 1), map_res.max()))
+                    t_epoch, t_forward / (batch_idx + 1), t_backward / (batch_idx + 1),
+                    map_probability.max()))
                 pass
 
         t1 = time.time()
@@ -89,6 +128,7 @@ class PerspectiveTrainer(BaseTrainer):
             'recall_percent': recall_s.avg * 100,
             'duration_seconds': t_epoch,
         }
+        self.last_train_metrics.update({f'brl/{name}': meter.avg for name, meter in criterion_metrics.items()})
 
         return losses / len(data_loader), precision_s.avg * 100
 
@@ -96,6 +136,7 @@ class PerspectiveTrainer(BaseTrainer):
         self.model.eval()
         losses = 0
         precision_s, recall_s = AverageMeter(), AverageMeter()
+        criterion_metrics = {}
         all_res_list = []
         t0 = time.time()
         if res_fpath is not None:
@@ -103,8 +144,9 @@ class PerspectiveTrainer(BaseTrainer):
         for batch_idx, (data, map_gt, imgs_gt, frame) in enumerate(data_loader):
             with torch.no_grad():
                 map_res, imgs_res = self.model(data)
+                map_probability = self._map_probability(map_res)
             if res_fpath is not None:
-                map_grid_res = map_res.detach().cpu().squeeze()
+                map_grid_res = map_probability.detach().cpu().squeeze()
                 v_s = map_grid_res[map_grid_res > self.cls_thres].unsqueeze(1)
                 grid_ij = (map_grid_res > self.cls_thres).nonzero()
                 if data_loader.dataset.base.indexing == 'xy':
@@ -114,13 +156,12 @@ class PerspectiveTrainer(BaseTrainer):
                 all_res_list.append(torch.cat([torch.ones_like(v_s) * frame, grid_xy.float() *
                                                data_loader.dataset.grid_reduce, v_s], dim=1))
 
-            loss = 0
-            for img_res, img_gt in zip(imgs_res, imgs_gt):
-                loss += self.criterion(img_res, img_gt.to(img_res.device), data_loader.dataset.img_kernel)
-            loss = self.criterion(map_res, map_gt.to(map_res.device), data_loader.dataset.map_kernel) + \
-                   loss / len(imgs_gt) * self.alpha
+            loss, _, _ = self._compute_loss(
+                map_res, imgs_res, map_gt, imgs_gt, data_loader.dataset
+            )
             losses += loss.item()
-            pred = (map_res > self.cls_thres).int().to(map_gt.device)
+            self._update_criterion_metrics(criterion_metrics)
+            pred = (map_probability > self.cls_thres).int().to(map_gt.device)
             true_positive = (pred.eq(map_gt) * pred.eq(1)).sum().item()
             false_positive = pred.sum().item() - true_positive
             false_negative = map_gt.sum().item() - true_positive
@@ -136,7 +177,7 @@ class PerspectiveTrainer(BaseTrainer):
             fig = plt.figure()
             subplt0 = fig.add_subplot(211, title="output")
             subplt1 = fig.add_subplot(212, title="target")
-            subplt0.imshow(map_res.cpu().detach().numpy().squeeze())
+            subplt0.imshow(map_probability.cpu().detach().numpy().squeeze())
             subplt1.imshow(self.criterion._traget_transform(map_res, map_gt, data_loader.dataset.map_kernel)
                            .cpu().detach().numpy().squeeze())
             plt.savefig(os.path.join(self.logdir, 'map.jpg'))
@@ -191,6 +232,7 @@ class PerspectiveTrainer(BaseTrainer):
             'detection_recall_percent': detection_recall,
             'duration_seconds': t_epoch,
         }
+        self.last_test_metrics.update({f'brl/{name}': meter.avg for name, meter in criterion_metrics.items()})
 
         return losses / len(data_loader), precision_s.avg * 100, moda
 

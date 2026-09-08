@@ -2,6 +2,7 @@ import os
 
 os.environ['OMP_NUM_THREADS'] = '1'
 import argparse
+import math
 import sys
 import shutil
 from distutils.dir_util import copy_tree
@@ -10,11 +11,12 @@ from pathlib import Path
 import tqdm
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms as T
 from dotenv import load_dotenv
 from multiview_detector.datasets import *
-from multiview_detector.loss.gaussian_mse import GaussianMSE
+from multiview_detector.loss import BEVBRLLoss, GaussianMSE
 from multiview_detector.models.persp_trans_detector import PerspTransDetector
 from multiview_detector.models.image_proj_variant import ImageProjVariant
 from multiview_detector.models.res_proj_variant import ResProjVariant
@@ -27,6 +29,41 @@ from multiview_detector.trainer import PerspectiveTrainer
 
 WANDB_ENTITY = 'GFA26AI02'
 WANDB_PROJECT = 'baseline-expriments'
+
+
+def configure_map_classifier_for_logits(model, occupancy_prior=0.01):
+    """Give the final BEV convolution a low foreground-prior bias.
+
+    The original Gaussian-regression head has ``bias=False``. A sigmoid BRL
+    head would otherwise start near p=0.5 for every ground-plane cell, which
+    makes confidence masks and dense negative learning unstable.
+    """
+    if not 0 < occupancy_prior < 1:
+        raise ValueError('occupancy_prior must be between 0 and 1')
+    if not hasattr(model, 'map_classifier') or not isinstance(model.map_classifier[-1], nn.Conv2d):
+        raise TypeError('Expected model.map_classifier to end with nn.Conv2d')
+
+    old_conv = model.map_classifier[-1]
+    if old_conv.bias is None:
+        new_conv = nn.Conv2d(
+            old_conv.in_channels,
+            old_conv.out_channels,
+            old_conv.kernel_size,
+            stride=old_conv.stride,
+            padding=old_conv.padding,
+            dilation=old_conv.dilation,
+            groups=old_conv.groups,
+            bias=True,
+            padding_mode=old_conv.padding_mode,
+        ).to(device=old_conv.weight.device, dtype=old_conv.weight.dtype)
+        with torch.no_grad():
+            new_conv.weight.copy_(old_conv.weight)
+        model.map_classifier[-1] = new_conv
+        old_conv = new_conv
+
+    initial_bias = math.log(occupancy_prior / (1.0 - occupancy_prior))
+    with torch.no_grad():
+        old_conv.bias.fill_(initial_bias)
 
 
 def init_wandb(args, model, train_set, test_set, logdir):
@@ -155,14 +192,21 @@ def main(args):
     normalize = T.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
     denormalize = img_color_denormalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
     train_trans = T.Compose([T.Resize([720, 1280]), T.ToTensor(), normalize, ])
-    if 'wildtrack' in args.dataset:
+    if args.data_path:
+        args.dataset, data_path = detect_dataset_root(args.data_path)
+        args.data_path = data_path
+        print(f'Detected {args.dataset} dataset at {data_path}')
+    elif args.dataset == 'wildtrack':
         data_path = os.path.expanduser('~/Data/Wildtrack')
-        base = Wildtrack(data_path)
-    elif 'multiviewx' in args.dataset:
+    elif args.dataset == 'multiviewx':
         data_path = os.path.expanduser('~/Data/MultiviewX')
-        base = MultiviewX(data_path)
     else:
         raise Exception('must choose from [wildtrack, multiviewx]')
+
+    if args.dataset == 'wildtrack':
+        base = Wildtrack(data_path)
+    else:
+        base = MultiviewX(data_path)
     train_set = frameDataset(base, train=True, transform=train_trans, grid_reduce=4)
     test_set = frameDataset(base, train=False, transform=train_trans, grid_reduce=4)
 
@@ -183,12 +227,43 @@ def main(args):
     else:
         raise Exception('no support for this variant')
 
+    # loss
+    view_criterion = GaussianMSE().cuda()
+    if args.loss == 'bev_brl':
+        configure_map_classifier_for_logits(model, args.brl_occupancy_prior)
+        use_consensus = not args.brl_no_consensus and args.variant != 'img_proj'
+        if args.variant == 'img_proj' and not args.brl_no_consensus:
+            print('ImageProjVariant has no learned per-view head; disabling BRL view consensus.')
+        criterion = BEVBRLLoss(
+            positive_threshold=args.brl_positive_threshold,
+            ignore_threshold=args.brl_ignore_threshold,
+            negative_threshold=args.brl_negative_threshold,
+            view_negative_threshold=args.brl_view_negative_threshold,
+            bev_threshold=args.brl_bev_threshold,
+            view_threshold=args.brl_view_threshold,
+            min_views=args.brl_min_views,
+            consensus_topk=args.brl_consensus_topk,
+            local_max_kernel=args.brl_local_max_kernel,
+            focal_alpha=args.brl_focal_alpha,
+            gamma_negative=args.brl_gamma_negative,
+            gamma_mirror=args.brl_gamma_mirror,
+            mirror_beta=args.brl_mirror_beta,
+            positive_weight=args.brl_positive_weight,
+            negative_weight=args.brl_negative_weight,
+            brl_weight=args.brl_weight,
+            warmup_epochs=args.brl_warmup_epochs,
+            ramp_epochs=args.brl_ramp_epochs,
+            coverage_threshold=args.brl_coverage_threshold,
+            max_mirror_per_observed=args.brl_max_mirror_per_observed,
+            use_consensus=use_consensus,
+            view_outputs_logits=False,
+        ).cuda()
+    else:
+        criterion = view_criterion
+
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.lr, steps_per_epoch=len(train_loader),
                                                     epochs=args.epochs)
-
-    # loss
-    criterion = GaussianMSE().cuda()
 
     # local and W&B logging
     logdir = f'logs/{args.dataset}_frame/{args.variant}/' + datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S') \
@@ -216,7 +291,15 @@ def main(args):
     test_prec_s = []
     test_moda_s = []
 
-    trainer = PerspectiveTrainer(model, criterion, logdir, denormalize, args.cls_thres, args.alpha)
+    trainer = PerspectiveTrainer(
+        model,
+        criterion,
+        logdir,
+        denormalize,
+        args.cls_thres,
+        args.alpha,
+        view_criterion=view_criterion,
+    )
 
     # learn
     try:
@@ -251,7 +334,10 @@ def main(args):
         else:
             resume_dir = f'logs/{args.dataset}_frame/{args.variant}/' + args.resume
             resume_fname = resume_dir + '/MultiviewDetector.pth'
-            model.load_state_dict(torch.load(resume_fname))
+            state_dict = torch.load(resume_fname)
+            incompatible = model.load_state_dict(state_dict, strict=args.loss != 'bev_brl')
+            if args.loss == 'bev_brl' and (incompatible.missing_keys or incompatible.unexpected_keys):
+                print('Loaded checkpoint with non-strict BEV-BRL compatibility:', incompatible)
             model.eval()
 
         print('Test loaded model...')
@@ -269,10 +355,14 @@ if __name__ == '__main__':
     parser.add_argument('--reID', action='store_true')
     parser.add_argument('--cls_thres', type=float, default=0.4)
     parser.add_argument('--alpha', type=float, default=1.0, help='ratio for per view loss')
+    parser.add_argument('--loss', type=str, default='gaussian_mse', choices=['gaussian_mse', 'bev_brl'],
+                        help='ground-plane loss (use bev_brl for partial-annotation training)')
     parser.add_argument('--variant', type=str, default='default',
                         choices=['default', 'img_proj', 'res_proj', 'no_joint_conv'])
     parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18'])
     parser.add_argument('-d', '--dataset', type=str, default='wildtrack', choices=['wildtrack', 'multiviewx'])
+    parser.add_argument('--data_path', type=str, default=None,
+                        help='dataset root (or parent directory); automatically detects Wildtrack or MultiviewX')
     parser.add_argument('-j', '--num_workers', type=int, default=4)
     parser.add_argument('-b', '--batch_size', type=int, default=1, metavar='N',
                         help='input batch size for training (default: 1)')
@@ -288,6 +378,30 @@ if __name__ == '__main__':
     parser.add_argument('--wandb_run_name', type=str, default=None, help='optional custom W&B run name')
     parser.add_argument('--wandb_mode', type=str, default='online', choices=['online', 'offline', 'disabled'],
                         help='W&B sync mode (default: online)')
+    parser.add_argument('--brl_positive_threshold', type=float, default=0.10)
+    parser.add_argument('--brl_ignore_threshold', type=float, default=0.01)
+    parser.add_argument('--brl_negative_threshold', type=float, default=0.15)
+    parser.add_argument('--brl_view_negative_threshold', type=float, default=0.15)
+    parser.add_argument('--brl_bev_threshold', type=float, default=0.60)
+    parser.add_argument('--brl_view_threshold', type=float, default=0.55)
+    parser.add_argument('--brl_min_views', type=int, default=2)
+    parser.add_argument('--brl_consensus_topk', type=int, default=2)
+    parser.add_argument('--brl_local_max_kernel', type=int, default=3)
+    parser.add_argument('--brl_focal_alpha', type=float, default=0.25)
+    parser.add_argument('--brl_gamma_negative', type=float, default=2.0)
+    parser.add_argument('--brl_gamma_mirror', type=float, default=2.0)
+    parser.add_argument('--brl_mirror_beta', type=float, default=1.0)
+    parser.add_argument('--brl_positive_weight', type=float, default=1.0)
+    parser.add_argument('--brl_negative_weight', type=float, default=0.50)
+    parser.add_argument('--brl_weight', type=float, default=0.10)
+    parser.add_argument('--brl_warmup_epochs', type=int, default=3)
+    parser.add_argument('--brl_ramp_epochs', type=int, default=3)
+    parser.add_argument('--brl_coverage_threshold', type=float, default=0.50)
+    parser.add_argument('--brl_max_mirror_per_observed', type=float, default=1.50,
+                        help='cap mirror peaks by this multiple of observed BEV points; <=0 disables the cap')
+    parser.add_argument('--brl_occupancy_prior', type=float, default=0.01)
+    parser.add_argument('--brl_no_consensus', action='store_true',
+                        help='use fused BEV confidence without projected-foot consensus')
     args = parser.parse_args()
 
     main(args)
