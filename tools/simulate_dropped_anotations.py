@@ -4,7 +4,7 @@ Simulate missing-instance annotations for Wildtrack / MultiviewX.
 
 Drop ratios are applied PER FRAME on train annotations:
 - drop20: randomly drop ~20% of instances in each train frame
-- drop40: randomly drop ~40% of instances in each train frame
+- drop45: randomly drop ~45% of instances in each train frame
 - drop60: randomly drop ~60% of instances in each train frame
 
 TEST frames are copied unchanged.
@@ -40,7 +40,7 @@ DATASET_META = {
 # setting name -> per-frame drop ratio
 DROP_SETTINGS = {
     "drop20": 0.20,
-    "drop40": 0.40,
+    "drop45": 0.45,
     "drop60": 0.60,
 }
 
@@ -233,7 +233,7 @@ def simulate(
         json.dump(all_stats, f, indent=2)
 
     print(f"\nSaved to: {out}")
-    print("Layout: <out>/{drop20,drop40,drop60}/annotations_positions/")
+    print("Layout: <out>/{drop20,drop45,drop60}/annotations_positions/")
     print("Training frames are corrupted; test frames remain fully annotated.")
 
 
@@ -271,7 +271,7 @@ def main():
     parser.add_argument(
         "--settings",
         nargs="+",
-        default=["drop20", "drop40", "drop60"],
+        default=["drop20", "drop45", "drop60"],
         choices=list(DROP_SETTINGS.keys()),
     )
     args = parser.parse_args()

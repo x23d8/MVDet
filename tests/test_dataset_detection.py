@@ -121,15 +121,67 @@ class PartialAnnotationPathTest(unittest.TestCase):
             self.assertEqual(Path(annotation_dir), (setting_root / 'annotations_positions').resolve())
             self.assertEqual(Path(hidden_dir), (setting_root / 'hidden_annotations_positions').resolve())
 
-    def test_pa_40_does_not_silently_use_legacy_drop45(self):
+    def test_resolves_separate_kaggle_inputs_with_duplicate_wrapper(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            kaggle_input = Path(temp_dir) / 'input'
+            complete_input = kaggle_input / 'multiviewx-3d'
+            dropped_input = kaggle_input / 'thesis-dataset'
+            root = complete_input / 'MultiviewX'
+            make_dataset(root, 'multiviewx')
+            setting_root = (
+                dropped_input
+                / 'MultiviewX_dropped'
+                / 'MultiviewX_dropped'
+                / 'drop45'
+            )
+            (setting_root / 'annotations_positions').mkdir(parents=True)
+            (setting_root / 'hidden_annotations_positions').mkdir()
+
+            dataset_name, dataset_root = detect_dataset_root(
+                complete_input,
+                dataset_name='multiviewx',
+            )
+            annotation_dir, hidden_dir = resolve_annotation_dirs(
+                dataset_root,
+                dataset_name,
+                45,
+                search_root=complete_input,
+                dropped_path=dropped_input,
+            )
+
+            self.assertEqual(Path(annotation_dir), (setting_root / 'annotations_positions').resolve())
+            self.assertEqual(Path(hidden_dir), (setting_root / 'hidden_annotations_positions').resolve())
+
+    def test_dropped_path_may_point_directly_to_setting(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / 'complete' / 'MultiviewX'
+            make_dataset(root, 'multiviewx')
+            setting_root = Path(temp_dir) / 'partial' / 'drop20'
+            (setting_root / 'annotations_positions').mkdir(parents=True)
+            (setting_root / 'hidden_annotations_positions').mkdir()
+
+            annotation_dir, hidden_dir = resolve_annotation_dirs(
+                root,
+                'multiviewx',
+                20,
+                dropped_path=setting_root,
+            )
+
+            self.assertEqual(Path(annotation_dir), (setting_root / 'annotations_positions').resolve())
+            self.assertEqual(Path(hidden_dir), (setting_root / 'hidden_annotations_positions').resolve())
+
+    def test_resolves_pa_45_annotations(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / 'Wildtrack'
             make_dataset(root, 'wildtrack')
-            legacy_root = Path(temp_dir) / 'Wildtrack_dropped' / 'drop45'
-            legacy_root.mkdir(parents=True)
+            setting_root = Path(temp_dir) / 'Wildtrack_dropped' / 'drop45'
+            (setting_root / 'annotations_positions').mkdir(parents=True)
+            (setting_root / 'hidden_annotations_positions').mkdir()
 
-            with self.assertRaisesRegex(FileNotFoundError, 'legacy 45%'):
-                resolve_annotation_dirs(root, 'wildtrack', 40)
+            annotation_dir, hidden_dir = resolve_annotation_dirs(root, 'wildtrack', 45)
+
+            self.assertEqual(Path(annotation_dir), (setting_root / 'annotations_positions').resolve())
+            self.assertEqual(Path(hidden_dir), (setting_root / 'hidden_annotations_positions').resolve())
 
 
 if __name__ == '__main__':

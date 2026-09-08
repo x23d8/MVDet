@@ -181,12 +181,16 @@ def main(args):
         base = Wildtrack(data_path)
     else:
         base = MultiviewX(data_path)
+    args.dataset_root = base.root
+    if not args.data_path:
+        print(f'Located {args.dataset} dataset at {base.root}')
 
     train_annotation_dir, hidden_annotation_dir = resolve_annotation_dirs(
         base.root,
         args.dataset,
         args.pa,
         search_root=requested_data_path,
+        dropped_path=args.dropped_path,
     )
     if args.pa:
         print(f'Using {args.pa}% dropped training annotations from {train_annotation_dir}')
@@ -318,9 +322,11 @@ if __name__ == '__main__':
                         choices=['default', 'img_proj', 'res_proj', 'no_joint_conv'])
     parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18'])
     parser.add_argument('-d', '--dataset', type=str, default=None, choices=['wildtrack', 'multiviewx'],
-                        help='dataset type; defaults to wildtrack unless --data_path detects it')
+                        help='dataset type; searches the default path and Kaggle inputs when --data_path is omitted')
     parser.add_argument('--data_path', type=str, default=None,
-                        help='dataset root (or parent directory); automatically detects Wildtrack or MultiviewX')
+                        help='optional complete dataset root containing images and calibration')
+    parser.add_argument('--dropped_path', type=str, default=None,
+                        help='separate root containing partial annotations; may point to the dropped dataset or drop setting')
     parser.add_argument('--pa', type=int, default=0, choices=[0, 20, 45, 60],
                         help='percentage of training annotations dropped (default: 0/full annotations)')
     parser.add_argument('-j', '--num_workers', type=int, default=4)

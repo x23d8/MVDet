@@ -86,6 +86,7 @@ Training hyperparameters:
 Partial annotation:
 - partial_annotation_percent: value of --pa (0, 20, 45, or 60)
 - annotation_drop_rate: --pa divided by 100 (0.0, 0.2, 0.45, or 0.6)
+- dropped_path: separate partial-annotation input supplied with --dropped_path
 - train_annotation_dir: resolved annotation directory used for training labels
 
 Validation/test labels and evaluation ground truth always use the complete
@@ -163,6 +164,11 @@ CUDA_VISIBLE_DEVICES=0,1 python main.py -d wildtrack --epochs 10 \
 MultiviewX:
 CUDA_VISIBLE_DEVICES=0,1 python main.py -d multiviewx --epochs 10 \
   --batch_size 1 --wandb_run_name multiviewx-baseline
+
+MultiviewX PA45 with complete and dropped data in separate Kaggle inputs:
+CUDA_VISIBLE_DEVICES=0,1 python main.py -d multiviewx \
+  --dropped_path /kaggle/input/thesis-dataset/MultiviewX_dropped \
+  --pa 45 --epochs 10 --batch_size 1 --wandb_run_name multiviewx-pa45
 
 The current models reference cuda:0 and cuda:1, so the Kaggle accelerator
 must provide two GPUs (for example, GPU T4 x2).

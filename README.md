@@ -106,6 +106,22 @@ If a parent contains both datasets, select one explicitly with `-d wildtrack`
 or `-d multiviewx`. Kaggle inputs remain read-only; generated `gt.txt` is stored
 under `/kaggle/working/mvdet_cache` as before.
 
+When the complete and dropped datasets are mounted as separate Kaggle inputs,
+use `--data_path` for the complete dataset containing images and calibration,
+and `--dropped_path` for the separate partial-annotation input. The dropped
+path may be a parent, a `<Dataset>_dropped` directory, or a selected `drop<pa>`
+directory; repeated Kaggle wrapper directories are handled automatically:
+
+```shell script
+python main.py -d multiviewx \
+  --dropped_path /kaggle/input/thesis-dataset/MultiviewX_dropped \
+  --pa 45
+```
+
+With `-d multiviewx`, the complete dataset is located automatically in the
+default location or Kaggle inputs. Use `--data_path` as an optional override
+when more than one compatible complete dataset is mounted.
+
 To train with dropped annotations, keep each generated dropped directory next
 to its complete dataset and select the percentage with `--pa`:
 
@@ -114,14 +130,14 @@ Wildtrack_dataset/
 |-- Wildtrack/
 `-- Wildtrack_dropped/
     |-- drop20/
-    |-- drop40/
+    |-- drop45/
     `-- drop60/
 ```
 
 ```shell script
 python main.py -d wildtrack --data_path /path/to/Wildtrack_dataset --pa 0
 python main.py -d wildtrack --data_path /path/to/Wildtrack_dataset --pa 20
-python main.py -d wildtrack --data_path /path/to/Wildtrack_dataset --pa 40
+python main.py -d wildtrack --data_path /path/to/Wildtrack_dataset --pa 45
 python main.py -d wildtrack --data_path /path/to/Wildtrack_dataset --pa 60
 ```
 
@@ -130,9 +146,9 @@ settings, only training targets come from
 `<Dataset>_dropped/drop<pa>/annotations_positions`; images, calibrations,
 validation labels, test labels, and evaluation ground truth remain from the
 complete dataset. Files in `hidden_annotations_positions` are deliberately
-excluded from the baseline loss. Generate `drop40` with the current
-`tools/simulate_dropped_anotations.py`; older `drop45` output is not treated as
-40% data. Local outputs are separated under
+excluded from the baseline loss. The supported settings are `0`, `20`, `45`,
+and `60`; `tools/simulate_dropped_anotations.py` generates the corresponding
+`drop20`, `drop45`, and `drop60` directories. Local outputs are separated under
 `logs/<dataset>_frame/<variant>/pa<pa>/` so concurrently launched settings do
 not share a checkpoint directory.
 

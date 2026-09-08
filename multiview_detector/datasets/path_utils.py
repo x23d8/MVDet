@@ -4,7 +4,7 @@ from collections import deque
 
 _KAGGLE_SEARCH_ROOTS = ('/kaggle/input', '/kaggle/working')
 _SKIP_DIRS = {'Image_subsets', 'annotations_positions', '.git', '__pycache__'}
-_PARTIAL_ANNOTATION_PERCENTAGES = (0, 20, 40, 60)
+_PARTIAL_ANNOTATION_PERCENTAGES = (0, 20, 45, 60)
 
 # Structural signatures used to distinguish full or partially annotated copies
 # of the two supported datasets. The contents of annotations_positions may be
@@ -71,7 +71,6 @@ def _find_named_dirs(search_root, names, max_depth=4):
         current, depth = queue.popleft()
         if _normalized_dir_name(os.path.basename(current)) in normalized_names:
             matches.append(current)
-            continue
         if depth >= max_depth:
             continue
 
@@ -139,7 +138,13 @@ def detect_dataset_root(root, max_depth=4, dataset_name=None):
     return matches[0]
 
 
-def resolve_annotation_dirs(dataset_root, dataset_name, partial_annotation_percent, search_root=None):
+def resolve_annotation_dirs(
+        dataset_root,
+        dataset_name,
+        partial_annotation_percent,
+        search_root=None,
+        dropped_path=None,
+):
     """Resolve the observed and hidden annotation directories for one run.
 
     Images, calibration files, and evaluation ground truth always stay under
@@ -148,9 +153,11 @@ def resolve_annotation_dirs(dataset_root, dataset_name, partial_annotation_perce
 
     ``<dataset>_dropped/drop<percent>/{annotations_positions,hidden_annotations_positions}``
 
-    Resolution is relative to the user-supplied ``search_root`` when present,
-    with the sibling of the detected complete dataset as the fast path. No
-    machine-specific dataset path is embedded here.
+    ``dropped_path`` may point to a separate mounted input containing the
+    dropped dataset, the ``<dataset>_dropped`` directory itself, or the
+    selected ``drop<percent>`` directory. When it is omitted, resolution falls
+    back to the sibling of the complete dataset and ``search_root`` for
+    backward compatibility. No machine-specific dataset path is embedded here.
     """
     if partial_annotation_percent not in _PARTIAL_ANNOTATION_PERCENTAGES:
         choices = ', '.join(map(str, _PARTIAL_ANNOTATION_PERCENTAGES))
@@ -172,45 +179,46 @@ def resolve_annotation_dirs(dataset_root, dataset_name, partial_annotation_perce
         f'{os.path.basename(dataset_root)}_dropped',
         f'{dataset_name}_dropped',
     )
-    dropped_roots = []
-    for dropped_root_name in dropped_root_names:
-        dropped_root = os.path.join(parent, dropped_root_name)
-        if dropped_root not in dropped_roots:
-            dropped_roots.append(dropped_root)
+    candidates = []
 
-    if search_root is not None:
-        requested_root = os.path.abspath(os.path.expanduser(os.fspath(search_root)))
-        for dropped_root in _find_named_dirs(requested_root, dropped_root_names):
-            if dropped_root not in dropped_roots:
-                dropped_roots.append(dropped_root)
+    def add_candidate(path):
+        path = os.path.abspath(path)
+        if path not in candidates:
+            candidates.append(path)
 
-    candidates = [os.path.join(dropped_root, setting) for dropped_root in dropped_roots]
+    if dropped_path is not None:
+        requested_dropped_path = os.path.abspath(
+            os.path.expanduser(os.fspath(dropped_path))
+        )
+        if not os.path.isdir(requested_dropped_path):
+            raise FileNotFoundError(
+                f'Dropped annotation path does not exist or is not a directory: '
+                f'{requested_dropped_path}'
+            )
+        if _normalized_dir_name(os.path.basename(requested_dropped_path)) == setting:
+            add_candidate(requested_dropped_path)
+        add_candidate(os.path.join(requested_dropped_path, setting))
+        for dropped_root in _find_named_dirs(requested_dropped_path, dropped_root_names):
+            add_candidate(os.path.join(dropped_root, setting))
+    else:
+        for dropped_root_name in dropped_root_names:
+            add_candidate(os.path.join(parent, dropped_root_name, setting))
+
+        if search_root is not None:
+            requested_root = os.path.abspath(os.path.expanduser(os.fspath(search_root)))
+            for dropped_root in _find_named_dirs(requested_root, dropped_root_names):
+                add_candidate(os.path.join(dropped_root, setting))
+
     for setting_root in candidates:
         annotation_dir = os.path.join(setting_root, 'annotations_positions')
         hidden_annotation_dir = os.path.join(setting_root, 'hidden_annotations_positions')
         if os.path.isdir(annotation_dir) and os.path.isdir(hidden_annotation_dir):
             return annotation_dir, hidden_annotation_dir
 
-    legacy_drop45 = next(
-        (
-            os.path.join(dropped_root, 'drop45')
-            for dropped_root in dropped_roots
-            if os.path.isdir(os.path.join(dropped_root, 'drop45'))
-        ),
-        None,
-    )
-    legacy_hint = ''
-    if partial_annotation_percent == 40 and legacy_drop45 is not None:
-        legacy_hint = (
-            f' Found legacy 45% annotations at {legacy_drop45}, but they cannot '
-            'be used as --pa 40. Re-run tools/simulate_dropped_anotations.py '
-            'after updating it to generate drop40.'
-        )
-
     checked = ', '.join(candidates)
     raise FileNotFoundError(
         f'Could not find dropped annotations for --pa {partial_annotation_percent}. '
-        f'Checked: {checked}.{legacy_hint}'
+        f'Checked: {checked}.'
     )
 
 
