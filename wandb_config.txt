@@ -14,12 +14,12 @@ can be compared on the W&B dashboard.
 2. Run naming
 -------------
 Default format:
-{dataset}-{variant}-{architecture}-{job_type}-{YYYYMMDD-HHMMSS}
+{dataset}-pa{percentage}-{variant}-{architecture}-{job_type}-{YYYYMMDD-HHMMSS}
 
 Examples:
-wildtrack-default-resnet18-train-20260907-101530
-multiviewx-default-resnet18-train-20260907-142015
-multiviewx-default-resnet18-inference-20260907-180100
+wildtrack-pa0-default-resnet18-train-20260907-101530
+wildtrack-pa45-default-resnet18-train-20260907-142015
+multiviewx-pa60-default-resnet18-inference-20260907-180100
 
 job_type is "train" for a new training run and "inference" when --resume is
 provided. A custom name can be supplied with:
@@ -27,6 +27,7 @@ provided. A custom name can be supplied with:
 
 Run tags:
 - dataset: wildtrack or multiviewx
+- partial annotation setting: pa0, pa20, pa45, or pa60
 - model variant: default, img_proj, res_proj, or no_joint_conv
 - architecture: resnet18 or vgg11
 
@@ -83,11 +84,12 @@ Training hyperparameters:
 - visualize: value of --visualize (default false)
 
 Partial annotation:
-- annotation_drop_rate: null
+- partial_annotation_percent: value of --pa (0, 20, 45, or 60)
+- annotation_drop_rate: --pa divided by 100 (0.0, 0.2, 0.45, or 0.6)
+- train_annotation_dir: resolved annotation directory used for training labels
 
-There is currently no partial-annotation/drop pipeline, so this value is
-deliberately null instead of incorrectly reporting a 0% drop. It should be
-set to the actual ratio when partial annotation is implemented.
+Validation/test labels and evaluation ground truth always use the complete
+dataset annotations. Hidden annotations are excluded from the baseline loss.
 
 Resume and W&B execution metadata:
 - resume / resume_checkpoint: checkpoint timestamp passed with --resume

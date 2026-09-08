@@ -47,7 +47,9 @@ def init_wandb(args, model, train_set, test_set, logdir):
 
     timestamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
     job_type = 'inference' if args.resume else 'train'
-    run_name = args.wandb_run_name or f'{args.dataset}-{args.variant}-{args.arch}-{job_type}-{timestamp}'
+    run_name = args.wandb_run_name or (
+        f'{args.dataset}-pa{args.pa}-{args.variant}-{args.arch}-{job_type}-{timestamp}'
+    )
     config = dict(vars(args))
     config.update({
         'model_name': type(model).__name__,
@@ -72,9 +74,9 @@ def init_wandb(args, model, train_set, test_set, logdir):
         'num_cameras': train_set.num_cam,
         'train_samples': len(train_set),
         'test_samples': len(test_set),
-        # No partial-annotation pipeline exists yet. Set this to the real drop
-        # ratio when that pipeline is added, rather than silently claiming 0%.
-        'annotation_drop_rate': getattr(args, 'annotation_drop_rate', None),
+        'partial_annotation_percent': args.pa,
+        'annotation_drop_rate': args.pa / 100,
+        'train_annotation_dir': train_set.annotation_dir,
         'resume_checkpoint': args.resume,
     })
     run = wandb.init(
@@ -85,7 +87,7 @@ def init_wandb(args, model, train_set, test_set, logdir):
         config=config,
         dir=logdir,
         mode=args.wandb_mode,
-        tags=[args.dataset, args.variant, args.arch],
+        tags=[args.dataset, f'pa{args.pa}', args.variant, args.arch],
     )
     run.define_metric('epoch')
     for namespace in ('train/*', 'validation/*', 'final_test/*', 'gpu/*'):
@@ -156,13 +158,22 @@ def main(args):
     denormalize = img_color_denormalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
     train_trans = T.Compose([T.Resize([720, 1280]), T.ToTensor(), normalize, ])
     if args.data_path:
-        args.dataset, data_path = detect_dataset_root(args.data_path)
-        args.data_path = data_path
+        requested_data_path = args.data_path
+        args.dataset, data_path = detect_dataset_root(
+            requested_data_path,
+            dataset_name=args.dataset,
+        )
+        args.dataset_root = data_path
         print(f'Detected {args.dataset} dataset at {data_path}')
-    elif args.dataset == 'wildtrack':
+    elif args.dataset in (None, 'wildtrack'):
+        args.dataset = 'wildtrack'
         data_path = os.path.expanduser('~/Data/Wildtrack')
+        requested_data_path = data_path
+        args.dataset_root = data_path
     elif args.dataset == 'multiviewx':
         data_path = os.path.expanduser('~/Data/MultiviewX')
+        requested_data_path = data_path
+        args.dataset_root = data_path
     else:
         raise Exception('must choose from [wildtrack, multiviewx]')
 
@@ -170,7 +181,28 @@ def main(args):
         base = Wildtrack(data_path)
     else:
         base = MultiviewX(data_path)
-    train_set = frameDataset(base, train=True, transform=train_trans, grid_reduce=4)
+
+    train_annotation_dir, hidden_annotation_dir = resolve_annotation_dirs(
+        base.root,
+        args.dataset,
+        args.pa,
+        search_root=requested_data_path,
+    )
+    if args.pa:
+        print(f'Using {args.pa}% dropped training annotations from {train_annotation_dir}')
+        print(f'Hidden annotations (excluded from training): {hidden_annotation_dir}')
+    else:
+        print(f'Using full training annotations from {train_annotation_dir}')
+
+    train_set = frameDataset(
+        base,
+        train=True,
+        transform=train_trans,
+        grid_reduce=4,
+        annotation_dir=train_annotation_dir,
+    )
+    # Validation/test labels and evaluation GT must remain complete for every
+    # partial-annotation setting, so no alternate annotation directory is used.
     test_set = frameDataset(base, train=False, transform=train_trans, grid_reduce=4)
 
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
@@ -198,8 +230,15 @@ def main(args):
     criterion = GaussianMSE().cuda()
 
     # local and W&B logging
-    logdir = f'logs/{args.dataset}_frame/{args.variant}/' + datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S') \
-        if not args.resume else f'logs/{args.dataset}_frame/{args.variant}/{args.resume}'
+    variant_logdir = os.path.join('logs', f'{args.dataset}_frame', args.variant)
+    pa_logdir = os.path.join(variant_logdir, f'pa{args.pa}')
+    if args.resume is None:
+        logdir = os.path.join(pa_logdir, datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S'))
+    else:
+        logdir = os.path.join(pa_logdir, args.resume)
+        legacy_logdir = os.path.join(variant_logdir, args.resume)
+        if not os.path.isdir(logdir) and os.path.isdir(legacy_logdir):
+            logdir = legacy_logdir
     if args.resume is None:
         os.makedirs(logdir, exist_ok=True)
         copy_tree('./multiview_detector', logdir + '/scripts/multiview_detector')
@@ -256,8 +295,7 @@ def main(args):
                 # save
                 torch.save(model.state_dict(), os.path.join(logdir, 'MultiviewDetector.pth'))
         else:
-            resume_dir = f'logs/{args.dataset}_frame/{args.variant}/' + args.resume
-            resume_fname = resume_dir + '/MultiviewDetector.pth'
+            resume_fname = os.path.join(logdir, 'MultiviewDetector.pth')
             model.load_state_dict(torch.load(resume_fname))
             model.eval()
 
@@ -279,9 +317,12 @@ if __name__ == '__main__':
     parser.add_argument('--variant', type=str, default='default',
                         choices=['default', 'img_proj', 'res_proj', 'no_joint_conv'])
     parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18'])
-    parser.add_argument('-d', '--dataset', type=str, default='wildtrack', choices=['wildtrack', 'multiviewx'])
+    parser.add_argument('-d', '--dataset', type=str, default=None, choices=['wildtrack', 'multiviewx'],
+                        help='dataset type; defaults to wildtrack unless --data_path detects it')
     parser.add_argument('--data_path', type=str, default=None,
                         help='dataset root (or parent directory); automatically detects Wildtrack or MultiviewX')
+    parser.add_argument('--pa', type=int, default=0, choices=[0, 20, 45, 60],
+                        help='percentage of training annotations dropped (default: 0/full annotations)')
     parser.add_argument('-j', '--num_workers', type=int, default=4)
     parser.add_argument('-b', '--batch_size', type=int, default=1, metavar='N',
                         help='input batch size for training (default: 1)')

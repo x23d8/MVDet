@@ -93,18 +93,48 @@ CUDA_VISIBLE_DEVICES=0,1 python main.py -d wildtrack
 CUDA_VISIBLE_DEVICES=0,1 python main.py -d multiviewx
 ``` 
 
-For a custom dataset copy, including partial annotations on local storage or
-Kaggle, pass its path directly. The dataset type is detected automatically, so
-`-d` is not required:
+For a custom dataset location, pass the full dataset root (or a parent that
+contains it). The dataset type is detected automatically when the path contains
+only one supported dataset:
 
 ```shell script
-CUDA_VISIBLE_DEVICES=0,1 python main.py --data_path /path/to/partial-multiviewx
-CUDA_VISIBLE_DEVICES=0,1 python main.py --data_path /kaggle/input/partial-wildtrack
+CUDA_VISIBLE_DEVICES=0,1 python main.py --data_path /path/to/MultiviewX
+CUDA_VISIBLE_DEVICES=0,1 python main.py --data_path /path/to/Wildtrack
 ```
 
-`--data_path` may point to the dataset root or a parent directory containing
-one supported dataset. Kaggle inputs remain read-only; generated `gt.txt` is
-stored under `/kaggle/working/mvdet_cache` as before.
+If a parent contains both datasets, select one explicitly with `-d wildtrack`
+or `-d multiviewx`. Kaggle inputs remain read-only; generated `gt.txt` is stored
+under `/kaggle/working/mvdet_cache` as before.
+
+To train with dropped annotations, keep each generated dropped directory next
+to its complete dataset and select the percentage with `--pa`:
+
+```text
+Wildtrack_dataset/
+|-- Wildtrack/
+`-- Wildtrack_dropped/
+    |-- drop20/
+    |-- drop40/
+    `-- drop60/
+```
+
+```shell script
+python main.py -d wildtrack --data_path /path/to/Wildtrack_dataset --pa 0
+python main.py -d wildtrack --data_path /path/to/Wildtrack_dataset --pa 20
+python main.py -d wildtrack --data_path /path/to/Wildtrack_dataset --pa 40
+python main.py -d wildtrack --data_path /path/to/Wildtrack_dataset --pa 60
+```
+
+`--pa 0` preserves the original full-annotation training behavior. For nonzero
+settings, only training targets come from
+`<Dataset>_dropped/drop<pa>/annotations_positions`; images, calibrations,
+validation labels, test labels, and evaluation ground truth remain from the
+complete dataset. Files in `hidden_annotations_positions` are deliberately
+excluded from the baseline loss. Generate `drop40` with the current
+`tools/simulate_dropped_anotations.py`; older `drop45` output is not treated as
+40% data. Local outputs are separated under
+`logs/<dataset>_frame/<variant>/pa<pa>/` so concurrently launched settings do
+not share a checkpoint directory.
 
 This should automatically return evaluation results similar to the reported 88.2\% MODA on Wildtrack dataset. 
 

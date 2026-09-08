@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from multiview_detector.datasets.path_utils import detect_dataset_root
+from multiview_detector.datasets.path_utils import detect_dataset_root, resolve_annotation_dirs
 
 
 DATASET_FILES = {
@@ -62,6 +62,74 @@ class DatasetDetectionTest(unittest.TestCase):
 
             with self.assertRaisesRegex(ValueError, 'multiple datasets'):
                 detect_dataset_root(parent)
+
+    def test_dataset_choice_disambiguates_shared_parent(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parent = Path(temp_dir)
+            make_dataset(parent / 'Wildtrack', 'wildtrack')
+            make_dataset(parent / 'MultiviewX', 'multiviewx')
+
+            dataset_name, resolved_root = detect_dataset_root(
+                parent,
+                dataset_name='multiviewx',
+            )
+
+            self.assertEqual(dataset_name, 'multiviewx')
+            self.assertEqual(Path(resolved_root), (parent / 'MultiviewX').resolve())
+
+
+class PartialAnnotationPathTest(unittest.TestCase):
+    def test_pa_zero_uses_full_annotations(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / 'Wildtrack'
+            make_dataset(root, 'wildtrack')
+
+            annotation_dir, hidden_dir = resolve_annotation_dirs(root, 'wildtrack', 0)
+
+            self.assertEqual(Path(annotation_dir), (root / 'annotations_positions').resolve())
+            self.assertIsNone(hidden_dir)
+
+    def test_resolves_sibling_dropped_annotations(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / 'Wildtrack'
+            make_dataset(root, 'wildtrack')
+            setting_root = Path(temp_dir) / 'Wildtrack_dropped' / 'drop20'
+            (setting_root / 'annotations_positions').mkdir(parents=True)
+            (setting_root / 'hidden_annotations_positions').mkdir()
+
+            annotation_dir, hidden_dir = resolve_annotation_dirs(root, 'wildtrack', 20)
+
+            self.assertEqual(Path(annotation_dir), (setting_root / 'annotations_positions').resolve())
+            self.assertEqual(Path(hidden_dir), (setting_root / 'hidden_annotations_positions').resolve())
+
+    def test_resolves_dropped_annotations_from_supplied_search_root(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            bundle = Path(temp_dir) / 'dataset-bundle'
+            root = bundle / 'complete' / 'Wildtrack'
+            make_dataset(root, 'wildtrack')
+            setting_root = bundle / 'generated' / 'Wildtrack_dropped' / 'drop60'
+            (setting_root / 'annotations_positions').mkdir(parents=True)
+            (setting_root / 'hidden_annotations_positions').mkdir()
+
+            annotation_dir, hidden_dir = resolve_annotation_dirs(
+                root,
+                'wildtrack',
+                60,
+                search_root=bundle,
+            )
+
+            self.assertEqual(Path(annotation_dir), (setting_root / 'annotations_positions').resolve())
+            self.assertEqual(Path(hidden_dir), (setting_root / 'hidden_annotations_positions').resolve())
+
+    def test_pa_40_does_not_silently_use_legacy_drop45(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / 'Wildtrack'
+            make_dataset(root, 'wildtrack')
+            legacy_root = Path(temp_dir) / 'Wildtrack_dropped' / 'drop45'
+            legacy_root.mkdir(parents=True)
+
+            with self.assertRaisesRegex(FileNotFoundError, 'legacy 45%'):
+                resolve_annotation_dirs(root, 'wildtrack', 40)
 
 
 if __name__ == '__main__':

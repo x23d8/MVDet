@@ -4,6 +4,7 @@ from collections import deque
 
 _KAGGLE_SEARCH_ROOTS = ('/kaggle/input', '/kaggle/working')
 _SKIP_DIRS = {'Image_subsets', 'annotations_positions', '.git', '__pycache__'}
+_PARTIAL_ANNOTATION_PERCENTAGES = (0, 20, 40, 60)
 
 # Structural signatures used to distinguish full or partially annotated copies
 # of the two supported datasets. The contents of annotations_positions may be
@@ -54,26 +55,68 @@ def _find_dataset_root(search_root, required_paths, max_depth=4):
     return None
 
 
-def detect_dataset_root(root, max_depth=4):
+def _normalized_dir_name(name):
+    return ''.join(character for character in name.lower() if character.isalnum())
+
+
+def _find_named_dirs(search_root, names, max_depth=4):
+    """Find shallow directories by name without entering large data folders."""
+    if not search_root or not os.path.isdir(search_root):
+        return []
+
+    normalized_names = {_normalized_dir_name(name) for name in names}
+    matches = []
+    queue = deque([(os.path.abspath(search_root), 0)])
+    while queue:
+        current, depth = queue.popleft()
+        if _normalized_dir_name(os.path.basename(current)) in normalized_names:
+            matches.append(current)
+            continue
+        if depth >= max_depth:
+            continue
+
+        try:
+            entries = sorted(os.scandir(current), key=lambda entry: entry.name.lower())
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.is_dir(follow_symlinks=False) and entry.name not in _SKIP_DIRS:
+                queue.append((entry.path, depth + 1))
+    return matches
+
+
+def detect_dataset_root(root, max_depth=4, dataset_name=None):
     """Return ``(dataset_name, dataset_root)`` detected below ``root``.
 
     The supplied path may be the dataset root itself or a shallow parent such
     as a Kaggle input directory containing an extra dataset/version folder.
+    When ``dataset_name`` is supplied, only that dataset is considered. This
+    makes a shared parent containing both Wildtrack and MultiviewX unambiguous.
     """
     requested_root = os.path.abspath(os.path.expanduser(os.fspath(root)))
     if not os.path.isdir(requested_root):
         raise FileNotFoundError(f'Dataset path does not exist or is not a directory: {requested_root}')
 
+    if dataset_name is not None and dataset_name not in _DATASET_SIGNATURES:
+        choices = ', '.join(_DATASET_SIGNATURES)
+        raise ValueError(f'Unsupported dataset {dataset_name!r}. Choose one of: {choices}')
+
+    signatures = (
+        {dataset_name: _DATASET_SIGNATURES[dataset_name]}
+        if dataset_name is not None
+        else _DATASET_SIGNATURES
+    )
+
     direct_matches = [
         (dataset_name, requested_root)
-        for dataset_name, required_paths in _DATASET_SIGNATURES.items()
+        for dataset_name, required_paths in signatures.items()
         if _is_dataset_root(requested_root, required_paths)
     ]
     if len(direct_matches) == 1:
         return direct_matches[0]
 
     matches = []
-    for dataset_name, required_paths in _DATASET_SIGNATURES.items():
+    for dataset_name, required_paths in signatures.items():
         resolved_root = _find_dataset_root(requested_root, required_paths, max_depth=max_depth)
         if resolved_root is not None:
             matches.append((dataset_name, resolved_root))
@@ -81,7 +124,7 @@ def detect_dataset_root(root, max_depth=4):
     if not matches:
         expected = '; '.join(
             f'{name}: {", ".join(paths)}'
-            for name, paths in _DATASET_SIGNATURES.items()
+            for name, paths in signatures.items()
         )
         raise FileNotFoundError(
             f'Could not detect a Wildtrack or MultiviewX dataset under {requested_root}. '
@@ -94,6 +137,81 @@ def detect_dataset_root(root, max_depth=4):
             'Pass --data_path pointing to one dataset root.'
         )
     return matches[0]
+
+
+def resolve_annotation_dirs(dataset_root, dataset_name, partial_annotation_percent, search_root=None):
+    """Resolve the observed and hidden annotation directories for one run.
+
+    Images, calibration files, and evaluation ground truth always stay under
+    ``dataset_root``.  For a partial-annotation run, only the annotations used
+    to construct training targets are read from the sibling dropped dataset:
+
+    ``<dataset>_dropped/drop<percent>/{annotations_positions,hidden_annotations_positions}``
+
+    Resolution is relative to the user-supplied ``search_root`` when present,
+    with the sibling of the detected complete dataset as the fast path. No
+    machine-specific dataset path is embedded here.
+    """
+    if partial_annotation_percent not in _PARTIAL_ANNOTATION_PERCENTAGES:
+        choices = ', '.join(map(str, _PARTIAL_ANNOTATION_PERCENTAGES))
+        raise ValueError(
+            f'Unsupported partial annotation percentage {partial_annotation_percent}. '
+            f'Choose one of: {choices}'
+        )
+
+    dataset_root = os.path.abspath(os.path.expanduser(os.fspath(dataset_root)))
+    full_annotation_dir = os.path.join(dataset_root, 'annotations_positions')
+    if not os.path.isdir(full_annotation_dir):
+        raise FileNotFoundError(f'Missing full annotation directory: {full_annotation_dir}')
+    if partial_annotation_percent == 0:
+        return full_annotation_dir, None
+
+    setting = f'drop{partial_annotation_percent}'
+    parent = os.path.dirname(dataset_root)
+    dropped_root_names = (
+        f'{os.path.basename(dataset_root)}_dropped',
+        f'{dataset_name}_dropped',
+    )
+    dropped_roots = []
+    for dropped_root_name in dropped_root_names:
+        dropped_root = os.path.join(parent, dropped_root_name)
+        if dropped_root not in dropped_roots:
+            dropped_roots.append(dropped_root)
+
+    if search_root is not None:
+        requested_root = os.path.abspath(os.path.expanduser(os.fspath(search_root)))
+        for dropped_root in _find_named_dirs(requested_root, dropped_root_names):
+            if dropped_root not in dropped_roots:
+                dropped_roots.append(dropped_root)
+
+    candidates = [os.path.join(dropped_root, setting) for dropped_root in dropped_roots]
+    for setting_root in candidates:
+        annotation_dir = os.path.join(setting_root, 'annotations_positions')
+        hidden_annotation_dir = os.path.join(setting_root, 'hidden_annotations_positions')
+        if os.path.isdir(annotation_dir) and os.path.isdir(hidden_annotation_dir):
+            return annotation_dir, hidden_annotation_dir
+
+    legacy_drop45 = next(
+        (
+            os.path.join(dropped_root, 'drop45')
+            for dropped_root in dropped_roots
+            if os.path.isdir(os.path.join(dropped_root, 'drop45'))
+        ),
+        None,
+    )
+    legacy_hint = ''
+    if partial_annotation_percent == 40 and legacy_drop45 is not None:
+        legacy_hint = (
+            f' Found legacy 45% annotations at {legacy_drop45}, but they cannot '
+            'be used as --pa 40. Re-run tools/simulate_dropped_anotations.py '
+            'after updating it to generate drop40.'
+        )
+
+    checked = ', '.join(candidates)
+    raise FileNotFoundError(
+        f'Could not find dropped annotations for --pa {partial_annotation_percent}. '
+        f'Checked: {checked}.{legacy_hint}'
+    )
 
 
 def resolve_dataset_root(root, dataset_name, required_paths):

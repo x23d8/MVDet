@@ -11,7 +11,8 @@ from multiview_detector.utils.projection import *
 
 class frameDataset(VisionDataset):
     def __init__(self, base, train=True, transform=ToTensor(), target_transform=ToTensor(),
-                 reID=False, grid_reduce=4, img_reduce=4, train_ratio=0.9, force_download=True):
+                 reID=False, grid_reduce=4, img_reduce=4, train_ratio=0.9, force_download=True,
+                 annotation_dir=None):
         super().__init__(base.root, transform=transform, target_transform=target_transform)
 
         map_sigma, map_kernel_size = 20 / grid_reduce, 20
@@ -20,6 +21,11 @@ class frameDataset(VisionDataset):
 
         self.base = base
         self.root, self.num_cam, self.num_frame = base.root, base.num_cam, base.num_frame
+        self.annotation_dir = os.path.abspath(
+            annotation_dir or os.path.join(self.root, 'annotations_positions')
+        )
+        if not os.path.isdir(self.annotation_dir):
+            raise FileNotFoundError(f'Annotation directory does not exist: {self.annotation_dir}')
         self.img_shape, self.worldgrid_shape = base.img_shape, base.worldgrid_shape  # H,W; N_row,N_col
         self.reducedgrid_shape = list(map(lambda x: int(x / self.grid_reduce), self.worldgrid_shape))
 
@@ -81,10 +87,13 @@ class frameDataset(VisionDataset):
         return os.path.join(dataset_cache, 'gt.txt')
 
     def prepare_gt(self):
+        # Evaluation always uses the complete annotations from the original
+        # dataset, even when training targets come from dropped annotations.
+        full_annotation_dir = os.path.join(self.root, 'annotations_positions')
         og_gt = []
-        for fname in sorted(os.listdir(os.path.join(self.root, 'annotations_positions'))):
+        for fname in sorted(os.listdir(full_annotation_dir)):
             frame = int(fname.split('.')[0])
-            with open(os.path.join(self.root, 'annotations_positions', fname)) as json_file:
+            with open(os.path.join(full_annotation_dir, fname)) as json_file:
                 all_pedestrians = json.load(json_file)
             for single_pedestrian in all_pedestrians:
                 def is_in_cam(cam):
@@ -103,10 +112,10 @@ class frameDataset(VisionDataset):
         np.savetxt(self.gt_fpath, og_gt, '%d')
 
     def download(self, frame_range):
-        for fname in sorted(os.listdir(os.path.join(self.root, 'annotations_positions'))):
+        for fname in sorted(os.listdir(self.annotation_dir)):
             frame = int(fname.split('.')[0])
             if frame in frame_range:
-                with open(os.path.join(self.root, 'annotations_positions', fname)) as json_file:
+                with open(os.path.join(self.annotation_dir, fname)) as json_file:
                     all_pedestrians = json.load(json_file)
                 i_s, j_s, v_s = [], [], []
                 head_row_cam_s, head_col_cam_s = [[] for _ in range(self.num_cam)], \
