@@ -1,0 +1,877 @@
+Settings:
+39.6s	41	{'reID': False, 'cls_thres': 0.4, 'alpha': 1.0, 'loss': 'auto', 'variant': 'default', 'arch': 'resnet18', 'dataset': 'wildtrack', 'data_path': None, 'dropped_path': '/kaggle/input/datasets/lee735/thesis-dataset/Wildtrack_dropped/Wildtrack_dropped', 'pa': 45, 'num_workers': 4, 'batch_size': 1, 'epochs': 10, 'lr': 0.1, 'weight_decay': 0.0005, 'momentum': 0.5, 'log_interval': 10, 'resume': None, 'visualize': False, 'seed': 1, 'wandb_run_name': None, 'wandb_mode': 'disabled', 'brl_positive_threshold': 0.1, 'brl_ignore_threshold': 0.01, 'brl_negative_threshold': 0.15, 'brl_view_negative_threshold': 0.15, 'brl_bev_threshold': 0.6, 'brl_view_threshold': 0.55, 'brl_min_views': 2, 'brl_consensus_topk': 2, 'brl_local_max_kernel': 3, 'brl_positive_weight': 1.0, 'brl_negative_weight': 0.5, 'brl_weight': 0.1, 'brl_warmup_epochs': 3, 'brl_ramp_epochs': 3, 'brl_negative_warmup_factor': 0.25, 'brl_coverage_threshold': 0.5, 'brl_max_mirror_per_observed': 1.5, 'brl_occupancy_prior': 0.01, 'brl_no_consensus': False, 'view_positive_threshold': 0.1, 'view_ignore_threshold': 0.01, 'view_negative_threshold': 0.15, 'view_hard_negative_threshold': 0.6, 'view_pseudo_threshold': 0.6, 'view_support_negative_threshold': 0.15, 'view_support_positive_threshold': 0.55, 'view_positive_weight': 1.0, 'view_negative_weight': 0.25, 'view_pseudo_weight': 0.1, 'view_head_weight': 0.25, 'view_foot_weight': 1.0, 'view_head_negative_weight': 0.0, 'view_max_pseudo_per_observed': 1.5, 'view_occupancy_prior': 0.01, 'dataset_root': '/kaggle/input/datasets/aryashah2k/large-scale-multicamera-detection-dataset/Wildtrack', 'resolved_loss': 'bev_brl'}
+39.6s	42	Testing before training...
+145.6s	43	/kaggle/working/MVDet/multiview_detector/evaluation/pyeval/evaluateDetection.py:56: UserWarning: loadtxt: input contained no data: "/kaggle/working/MVDet/logs/wildtrack_frame/default/pa45/2026-09-09_10-22-25/test.txt"
+145.6s	44	  detRaw = np.loadtxt(res_fpath, ndmin=2)
+145.6s	45	moda: 0.0%, modp: 0.0%, precision: 0.0%, recall: 0.0%
+145.6s	46	Test, Loss: 0.481938, Precision: 0.0%, Recall: 0.0, 	Time: 105.391
+145.6s	47	[validation] Epoch: 0, loss: 0.4819, grid_precision_percent: 0.0000, grid_recall_percent: 0.0000, moda_percent: 0.0000, modp_percent: 0.0000, detection_precision_percent: 0.0000, detection_recall_percent: 0.0000, duration_seconds: 105.3909, bev/loss_positive: 0.2247, bev/loss_negative: 0.0000, bev/loss_mirror: 0.0000, bev/negative_weight: 0.1250, bev/brl_weight: 0.0000, bev/positive_cells: 1577.6000, bev/halo_cells: 1385.8500, bev/reliable_negative_cells: 40236.5500, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.0000, bev/uncertain_cells: 0.0000, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.0110, bev/max_consensus: 0.0192, view/loss_head_positive: 0.2138, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.2038, view/loss_foot_negative: 0.0000, view/loss_foot_pseudo: 0.0000, view/head_positive_cells: 581.7536, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 128567.6071, view/foot_positive_cells: 658.4607, view/foot_negative_cells: 91847.0643, view/foot_hard_negative_cells: 0.0000, view/foot_pseudo_cells: 0.0000, view/foot_uncertain_cells: 36550.1643, view/empty_views_skipped: 0.0000, view/ramp_factor: 0.0000, view/max_foot_support: 0.0108, GPU 0: 0% util, 113 MB allocated, GPU 1: 0% util, 11 MB allocated
+145.6s	48	
+  0%|                                                    | 0/10 [00:00<?, ?it/s]Training...
+251.0s	49	Train Epoch: 1, Batch:10, Loss: 0.468583, prec: 0.0%, recall: 0.0%, Time: 105.5 (f0.988+b9.558), maxima: 0.017
+294.7s	50	Train Epoch: 1, Batch:20, Loss: 0.444573, prec: 0.0%, recall: 0.6%, Time: 149.2 (f0.888+b6.570), maxima: 0.677
+337.5s	51	Train Epoch: 1, Batch:30, Loss: 0.420889, prec: 0.0%, recall: 14.6%, Time: 191.9 (f0.852+b5.545), maxima: 0.017
+380.3s	52	Train Epoch: 1, Batch:40, Loss: 0.411051, prec: 0.0%, recall: 11.0%, Time: 234.7 (f0.836+b5.033), maxima: 0.012
+422.8s	53	Train Epoch: 1, Batch:50, Loss: 0.400430, prec: 0.0%, recall: 8.8%, Time: 277.3 (f0.824+b4.721), maxima: 0.017
+465.1s	54	Train Epoch: 1, Batch:60, Loss: 0.388480, prec: 0.0%, recall: 7.3%, Time: 319.5 (f0.817+b4.508), maxima: 0.098
+507.2s	55	Train Epoch: 1, Batch:70, Loss: 0.368168, prec: 0.0%, recall: 10.9%, Time: 361.6 (f0.812+b4.353), maxima: 0.170
+549.3s	56	Train Epoch: 1, Batch:80, Loss: 0.350452, prec: 0.0%, recall: 13.2%, Time: 403.8 (f0.808+b4.239), maxima: 0.316
+591.5s	57	Train Epoch: 1, Batch:90, Loss: 0.332249, prec: 0.0%, recall: 17.0%, Time: 445.9 (f0.807+b4.148), maxima: 0.791
+633.6s	58	Train Epoch: 1, Batch:100, Loss: 0.318637, prec: 0.0%, recall: 18.2%, Time: 488.0 (f0.805+b4.075), maxima: 0.390
+675.8s	59	Train Epoch: 1, Batch:110, Loss: 0.307629, prec: 0.0%, recall: 19.1%, Time: 530.3 (f0.804+b4.016), maxima: 0.653
+717.8s	60	Train Epoch: 1, Batch:120, Loss: 0.296228, prec: 0.1%, recall: 20.7%, Time: 572.2 (f0.801+b3.967), maxima: 0.424
+759.8s	61	Train Epoch: 1, Batch:130, Loss: 0.285180, prec: 0.1%, recall: 22.6%, Time: 614.2 (f0.801+b3.924), maxima: 0.409
+801.8s	62	Train Epoch: 1, Batch:140, Loss: 0.276431, prec: 0.1%, recall: 24.0%, Time: 656.3 (f0.800+b3.887), maxima: 0.448
+843.8s	63	Train Epoch: 1, Batch:150, Loss: 0.268319, prec: 0.1%, recall: 25.5%, Time: 698.3 (f0.799+b3.857), maxima: 0.689
+885.7s	64	Train Epoch: 1, Batch:160, Loss: 0.260712, prec: 0.1%, recall: 27.3%, Time: 740.2 (f0.797+b3.829), maxima: 0.616
+927.5s	65	Train Epoch: 1, Batch:170, Loss: 0.254165, prec: 0.1%, recall: 29.0%, Time: 782.0 (f0.795+b3.804), maxima: 0.676
+969.6s	66	Train Epoch: 1, Batch:180, Loss: 0.248075, prec: 0.1%, recall: 30.5%, Time: 824.0 (f0.794+b3.783), maxima: 0.571
+1011.5s	67	Train Epoch: 1, Batch:190, Loss: 0.242575, prec: 0.1%, recall: 31.9%, Time: 865.9 (f0.794+b3.764), maxima: 0.334
+1053.4s	68	Train Epoch: 1, Batch:200, Loss: 0.239577, prec: 0.1%, recall: 32.6%, Time: 907.8 (f0.793+b3.747), maxima: 0.300
+1095.3s	69	Train Epoch: 1, Batch:210, Loss: 0.238933, prec: 0.1%, recall: 32.1%, Time: 949.7 (f0.791+b3.731), maxima: 0.158
+1137.3s	70	Train Epoch: 1, Batch:220, Loss: 0.238684, prec: 0.1%, recall: 31.9%, Time: 991.7 (f0.791+b3.717), maxima: 0.426
+1179.1s	71	Train Epoch: 1, Batch:230, Loss: 0.236945, prec: 0.2%, recall: 32.5%, Time: 1033.5 (f0.790+b3.703), maxima: 0.938
+1221.2s	72	Train Epoch: 1, Batch:240, Loss: 0.234514, prec: 0.2%, recall: 33.7%, Time: 1075.6 (f0.790+b3.691), maxima: 0.950
+1263.5s	73	Train Epoch: 1, Batch:250, Loss: 0.231545, prec: 0.2%, recall: 34.6%, Time: 1117.9 (f0.791+b3.681), maxima: 0.736
+1305.5s	74	Train Epoch: 1, Batch:260, Loss: 0.229472, prec: 0.2%, recall: 34.8%, Time: 1159.9 (f0.790+b3.671), maxima: 0.440
+1347.7s	75	Train Epoch: 1, Batch:270, Loss: 0.228278, prec: 0.2%, recall: 35.5%, Time: 1202.1 (f0.791+b3.661), maxima: 0.805
+1389.8s	76	Train Epoch: 1, Batch:280, Loss: 0.226419, prec: 0.2%, recall: 36.1%, Time: 1244.2 (f0.791+b3.653), maxima: 0.942
+1431.9s	77	Train Epoch: 1, Batch:290, Loss: 0.223853, prec: 0.2%, recall: 37.4%, Time: 1286.3 (f0.791+b3.645), maxima: 0.924
+1473.7s	78	Train Epoch: 1, Batch:300, Loss: 0.222337, prec: 0.2%, recall: 38.0%, Time: 1328.1 (f0.790+b3.637), maxima: 0.560
+1515.8s	79	Train Epoch: 1, Batch:310, Loss: 0.221677, prec: 0.3%, recall: 38.3%, Time: 1370.3 (f0.790+b3.630), maxima: 0.915
+1557.8s	80	Train Epoch: 1, Batch:320, Loss: 0.220001, prec: 0.3%, recall: 39.2%, Time: 1412.2 (f0.790+b3.623), maxima: 0.499
+1599.9s	81	Train Epoch: 1, Batch:330, Loss: 0.218694, prec: 0.3%, recall: 40.0%, Time: 1454.3 (f0.790+b3.617), maxima: 0.962
+1642.0s	82	Train Epoch: 1, Batch:340, Loss: 0.217959, prec: 0.4%, recall: 40.4%, Time: 1496.4 (f0.790+b3.611), maxima: 0.979
+1683.9s	83	Train Epoch: 1, Batch:350, Loss: 0.217175, prec: 0.4%, recall: 40.8%, Time: 1538.3 (f0.789+b3.606), maxima: 0.571
+1726.0s	84	Train Epoch: 1, Batch:360, Loss: 0.215690, prec: 0.4%, recall: 41.5%, Time: 1580.4 (f0.789+b3.601), maxima: 0.965
+1726.2s	85	Train Epoch: 1, Batch:360, Loss: 0.215690, Precision: 0.4%, Recall: 41.5%, Time: 1580.573
+1726.2s	86	[train] Epoch: 1, loss: 0.2157, precision_percent: 0.4271, recall_percent: 41.5361, duration_seconds: 1580.5731, bev/loss_positive: 0.1171, bev/loss_negative: 0.0002, bev/loss_mirror: 0.0012, bev/negative_weight: 0.1250, bev/brl_weight: 0.0000, bev/positive_cells: 877.1056, bev/halo_cells: 880.0917, bev/reliable_negative_cells: 3887.3111, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.1556, bev/uncertain_cells: 37555.3361, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.6032, bev/max_consensus: 0.5970, view/loss_head_positive: 0.0948, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0748, view/loss_foot_negative: 0.0006, view/loss_foot_pseudo: 0.0000, view/head_positive_cells: 268.8579, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 127210.4496, view/foot_positive_cells: 287.1563, view/foot_negative_cells: 14469.8972, view/foot_hard_negative_cells: 0.0000, view/foot_pseudo_cells: 0.0000, view/foot_uncertain_cells: 112698.5770, view/empty_views_skipped: 0.0147, view/ramp_factor: 0.0000, view/max_foot_support: 0.4681, GPU 0: 47% util, 323 MB allocated, GPU 1: 22% util, 34 MB allocated
+1726.2s	87	Testing...
+1820.5s	88	moda: 0.0%, modp: 66.7%, precision: 23.7%, recall: 8.3%
+1820.5s	89	Test, Loss: 0.229938, Precision: 1.5%, Recall: 4.6, 	Time: 93.692
+1820.5s	90	[validation] Epoch: 1, loss: 0.2299, grid_precision_percent: 1.4682, grid_recall_percent: 4.5833, moda_percent: 0.0000, modp_percent: 66.7263, detection_precision_percent: 23.6527, detection_recall_percent: 8.2983, duration_seconds: 93.6924, bev/loss_positive: 0.1494, bev/loss_negative: 0.0003, bev/loss_mirror: 0.0000, bev/negative_weight: 0.1250, bev/brl_weight: 0.0000, bev/positive_cells: 1577.6000, bev/halo_cells: 1385.8500, bev/reliable_negative_cells: 964.4500, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.0000, bev/uncertain_cells: 39272.1000, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.5869, bev/max_consensus: 0.6350, view/loss_head_positive: 0.0668, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0638, view/loss_foot_negative: 0.0000, view/loss_foot_pseudo: 0.0000, view/head_positive_cells: 581.7536, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 128567.6071, view/foot_positive_cells: 658.4607, view/foot_negative_cells: 0.0179, view/foot_hard_negative_cells: 0.0000, view/foot_pseudo_cells: 0.0000, view/foot_uncertain_cells: 128397.2107, view/empty_views_skipped: 0.0000, view/ramp_factor: 0.0000, view/max_foot_support: 0.4668, GPU 0: 0% util, 323 MB allocated, GPU 1: 0% util, 34 MB allocated
+1820.9s	91	
+ 10%|████                                    | 1/10 [27:55<4:11:17, 1675.31s/it]Training...
+1865.5s	92	Train Epoch: 2, Batch:10, Loss: 0.181322, prec: 0.6%, recall: 51.0%, Time: 44.6 (f1.014+b3.449), maxima: 0.980
+1907.5s	93	Train Epoch: 2, Batch:20, Loss: 0.176628, prec: 0.6%, recall: 58.4%, Time: 86.6 (f0.899+b3.432), maxima: 0.993
+1949.6s	94	Train Epoch: 2, Batch:30, Loss: 0.184913, prec: 0.8%, recall: 51.9%, Time: 128.7 (f0.863+b3.428), maxima: 0.865
+1991.8s	95	Train Epoch: 2, Batch:40, Loss: 0.180504, prec: 0.8%, recall: 57.3%, Time: 170.9 (f0.845+b3.428), maxima: 0.977
+2034.0s	96	Train Epoch: 2, Batch:50, Loss: 0.172846, prec: 0.7%, recall: 60.2%, Time: 213.1 (f0.832+b3.430), maxima: 0.935
+2076.1s	97	Train Epoch: 2, Batch:60, Loss: 0.169381, prec: 0.8%, recall: 62.8%, Time: 255.2 (f0.825+b3.428), maxima: 0.950
+2118.0s	98	Train Epoch: 2, Batch:70, Loss: 0.167734, prec: 0.8%, recall: 64.2%, Time: 297.1 (f0.820+b3.425), maxima: 0.988
+2160.0s	99	Train Epoch: 2, Batch:80, Loss: 0.169500, prec: 1.2%, recall: 62.5%, Time: 339.1 (f0.816+b3.422), maxima: 0.811
+2202.1s	100	Train Epoch: 2, Batch:90, Loss: 0.168473, prec: 1.2%, recall: 63.0%, Time: 381.2 (f0.811+b3.424), maxima: 0.994
+2243.9s	101	Train Epoch: 2, Batch:100, Loss: 0.165964, prec: 1.1%, recall: 63.4%, Time: 423.0 (f0.806+b3.424), maxima: 0.843
+2285.7s	102	Train Epoch: 2, Batch:110, Loss: 0.168554, prec: 1.3%, recall: 63.1%, Time: 464.8 (f0.802+b3.423), maxima: 1.000
+2327.7s	103	Train Epoch: 2, Batch:120, Loss: 0.168147, prec: 1.3%, recall: 63.2%, Time: 506.8 (f0.800+b3.423), maxima: 0.802
+2369.5s	104	Train Epoch: 2, Batch:130, Loss: 0.167074, prec: 1.2%, recall: 63.6%, Time: 548.7 (f0.797+b3.424), maxima: 0.969
+2411.6s	105	Train Epoch: 2, Batch:140, Loss: 0.165651, prec: 1.2%, recall: 64.4%, Time: 590.8 (f0.796+b3.424), maxima: 0.951
+2453.6s	106	Train Epoch: 2, Batch:150, Loss: 0.163615, prec: 1.1%, recall: 65.1%, Time: 632.8 (f0.795+b3.424), maxima: 0.886
+2495.6s	107	Train Epoch: 2, Batch:160, Loss: 0.160767, prec: 1.1%, recall: 66.6%, Time: 674.7 (f0.794+b3.424), maxima: 0.989
+2537.7s	108	Train Epoch: 2, Batch:170, Loss: 0.158360, prec: 1.1%, recall: 67.5%, Time: 716.8 (f0.794+b3.423), maxima: 0.911
+2579.7s	109	Train Epoch: 2, Batch:180, Loss: 0.157099, prec: 1.1%, recall: 67.8%, Time: 758.8 (f0.793+b3.423), maxima: 0.953
+2621.6s	110	Train Epoch: 2, Batch:190, Loss: 0.155845, prec: 1.1%, recall: 68.7%, Time: 800.7 (f0.791+b3.423), maxima: 0.906
+2663.7s	111	Train Epoch: 2, Batch:200, Loss: 0.154531, prec: 1.1%, recall: 69.2%, Time: 842.8 (f0.791+b3.423), maxima: 0.872
+2705.8s	112	Train Epoch: 2, Batch:210, Loss: 0.153037, prec: 1.1%, recall: 70.2%, Time: 884.9 (f0.791+b3.423), maxima: 0.980
+2747.7s	113	Train Epoch: 2, Batch:220, Loss: 0.151589, prec: 1.0%, recall: 70.6%, Time: 926.8 (f0.790+b3.423), maxima: 0.943
+2789.7s	114	Train Epoch: 2, Batch:230, Loss: 0.149980, prec: 1.0%, recall: 71.3%, Time: 968.8 (f0.789+b3.424), maxima: 0.921
+2831.8s	115	Train Epoch: 2, Batch:240, Loss: 0.148350, prec: 1.0%, recall: 72.2%, Time: 1010.9 (f0.788+b3.424), maxima: 0.953
+2873.9s	116	Train Epoch: 2, Batch:250, Loss: 0.146890, prec: 1.0%, recall: 72.9%, Time: 1053.0 (f0.788+b3.424), maxima: 0.855
+2915.8s	117	Train Epoch: 2, Batch:260, Loss: 0.145932, prec: 1.0%, recall: 73.4%, Time: 1094.9 (f0.787+b3.425), maxima: 0.996
+2957.7s	118	Train Epoch: 2, Batch:270, Loss: 0.145141, prec: 1.0%, recall: 73.5%, Time: 1136.9 (f0.786+b3.424), maxima: 0.932
+2999.7s	119	Train Epoch: 2, Batch:280, Loss: 0.144481, prec: 1.0%, recall: 74.0%, Time: 1178.8 (f0.786+b3.425), maxima: 0.978
+3041.7s	120	Train Epoch: 2, Batch:290, Loss: 0.143623, prec: 1.0%, recall: 74.4%, Time: 1220.8 (f0.785+b3.425), maxima: 0.979
+3083.7s	121	Train Epoch: 2, Batch:300, Loss: 0.143055, prec: 1.0%, recall: 74.6%, Time: 1262.8 (f0.784+b3.425), maxima: 0.985
+3125.6s	122	Train Epoch: 2, Batch:310, Loss: 0.142171, prec: 0.9%, recall: 74.9%, Time: 1304.7 (f0.783+b3.425), maxima: 0.973
+3167.4s	123	Train Epoch: 2, Batch:320, Loss: 0.141164, prec: 0.9%, recall: 75.3%, Time: 1346.6 (f0.782+b3.426), maxima: 0.886
+3209.5s	124	Train Epoch: 2, Batch:330, Loss: 0.140439, prec: 0.9%, recall: 75.6%, Time: 1388.6 (f0.782+b3.426), maxima: 0.892
+3251.6s	125	Train Epoch: 2, Batch:340, Loss: 0.139645, prec: 0.9%, recall: 76.0%, Time: 1430.7 (f0.782+b3.426), maxima: 0.935
+3293.7s	126	Train Epoch: 2, Batch:350, Loss: 0.138731, prec: 0.9%, recall: 76.3%, Time: 1472.8 (f0.783+b3.425), maxima: 0.947
+3335.6s	127	Train Epoch: 2, Batch:360, Loss: 0.137861, prec: 0.9%, recall: 76.8%, Time: 1514.7 (f0.783+b3.425), maxima: 0.911
+3335.8s	128	Train Epoch: 2, Batch:360, Loss: 0.137861, Precision: 0.9%, Recall: 76.8%, Time: 1514.927
+3335.8s	129	[train] Epoch: 2, loss: 0.1379, precision_percent: 0.8894, recall_percent: 76.7944, duration_seconds: 1514.9274, bev/loss_positive: 0.0621, bev/loss_negative: 0.0012, bev/loss_mirror: 0.0027, bev/negative_weight: 0.1250, bev/brl_weight: 0.0000, bev/positive_cells: 877.1056, bev/halo_cells: 880.0917, bev/reliable_negative_cells: 618.3250, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.6861, bev/uncertain_cells: 40823.7917, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.9273, bev/max_consensus: 0.6092, view/loss_head_positive: 0.0634, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0598, view/loss_foot_negative: 0.0010, view/loss_foot_pseudo: 0.0000, view/head_positive_cells: 268.8579, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 127210.4496, view/foot_positive_cells: 287.1563, view/foot_negative_cells: 3.2762, view/foot_hard_negative_cells: 0.0000, view/foot_pseudo_cells: 0.0000, view/foot_uncertain_cells: 127165.1980, view/empty_views_skipped: 0.0147, view/ramp_factor: 0.0000, view/max_foot_support: 0.6206, GPU 0: 92% util, 323 MB allocated, GPU 1: 78% util, 34 MB allocated
+3335.8s	130	Testing...
+3431.5s	131	moda: 0.0%, modp: 72.0%, precision: 15.0%, recall: 99.6%
+3431.5s	132	Test, Loss: 0.110187, Precision: 0.9%, Recall: 95.2, 	Time: 93.957
+3431.5s	133	[validation] Epoch: 2, loss: 0.1102, grid_precision_percent: 0.8854, grid_recall_percent: 95.1920, moda_percent: 0.0000, modp_percent: 71.9779, detection_precision_percent: 15.0405, detection_recall_percent: 99.5798, duration_seconds: 93.9565, bev/loss_positive: 0.0330, bev/loss_negative: 0.0018, bev/loss_mirror: 0.0000, bev/negative_weight: 0.1250, bev/brl_weight: 0.0000, bev/positive_cells: 1577.6000, bev/halo_cells: 1385.8500, bev/reliable_negative_cells: 398.6000, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.0000, bev/uncertain_cells: 39837.9500, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.9111, bev/max_consensus: 0.5841, view/loss_head_positive: 0.0644, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0609, view/loss_foot_negative: 0.0003, view/loss_foot_pseudo: 0.0000, view/head_positive_cells: 581.7536, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 128567.6071, view/foot_positive_cells: 658.4607, view/foot_negative_cells: 0.3857, view/foot_hard_negative_cells: 0.0000, view/foot_pseudo_cells: 0.0000, view/foot_uncertain_cells: 128396.8429, view/empty_views_skipped: 0.0000, view/ramp_factor: 0.0000, view/max_foot_support: 0.6232, GPU 0: 0% util, 323 MB allocated, GPU 1: 0% util, 34 MB allocated
+3432.0s	134	
+ 20%|████████                                | 2/10 [54:46<3:38:20, 1637.55s/it]Training...
+3477.3s	135	Train Epoch: 3, Batch:10, Loss: 0.104350, prec: 0.5%, recall: 93.9%, Time: 45.3 (f1.086+b3.442), maxima: 0.963
+3519.2s	136	Train Epoch: 3, Batch:20, Loss: 0.105370, prec: 0.6%, recall: 92.3%, Time: 87.2 (f0.933+b3.426), maxima: 0.885
+3561.1s	137	Train Epoch: 3, Batch:30, Loss: 0.103638, prec: 0.6%, recall: 93.8%, Time: 129.0 (f0.879+b3.422), maxima: 0.890
+3603.0s	138	Train Epoch: 3, Batch:40, Loss: 0.103021, prec: 0.6%, recall: 92.9%, Time: 171.0 (f0.850+b3.423), maxima: 0.983
+3645.0s	139	Train Epoch: 3, Batch:50, Loss: 0.102922, prec: 0.6%, recall: 92.9%, Time: 212.9 (f0.839+b3.420), maxima: 0.877
+3686.8s	140	Train Epoch: 3, Batch:60, Loss: 0.103055, prec: 0.5%, recall: 93.3%, Time: 254.8 (f0.829+b3.418), maxima: 0.943
+3728.8s	141	Train Epoch: 3, Batch:70, Loss: 0.102721, prec: 0.5%, recall: 93.1%, Time: 296.8 (f0.821+b3.418), maxima: 0.941
+3770.7s	142	Train Epoch: 3, Batch:80, Loss: 0.102933, prec: 0.5%, recall: 93.5%, Time: 338.7 (f0.815+b3.419), maxima: 0.966
+3812.6s	143	Train Epoch: 3, Batch:90, Loss: 0.102881, prec: 0.5%, recall: 93.4%, Time: 380.6 (f0.809+b3.419), maxima: 0.935
+3854.3s	144	Train Epoch: 3, Batch:100, Loss: 0.103339, prec: 0.5%, recall: 93.6%, Time: 422.2 (f0.805+b3.418), maxima: 0.923
+3896.2s	145	Train Epoch: 3, Batch:110, Loss: 0.103740, prec: 0.5%, recall: 93.9%, Time: 464.2 (f0.802+b3.418), maxima: 0.912
+3938.4s	146	Train Epoch: 3, Batch:120, Loss: 0.103583, prec: 0.5%, recall: 94.0%, Time: 506.3 (f0.800+b3.419), maxima: 0.938
+3980.4s	147	Train Epoch: 3, Batch:130, Loss: 0.103703, prec: 0.5%, recall: 93.9%, Time: 548.4 (f0.798+b3.420), maxima: 0.901
+4022.3s	148	Train Epoch: 3, Batch:140, Loss: 0.103979, prec: 0.5%, recall: 93.8%, Time: 590.2 (f0.796+b3.420), maxima: 0.845
+4064.2s	149	Train Epoch: 3, Batch:150, Loss: 0.104196, prec: 0.5%, recall: 93.8%, Time: 632.2 (f0.793+b3.421), maxima: 0.934
+4106.2s	150	Train Epoch: 3, Batch:160, Loss: 0.104169, prec: 0.5%, recall: 93.8%, Time: 674.2 (f0.792+b3.422), maxima: 0.984
+4148.1s	151	Train Epoch: 3, Batch:170, Loss: 0.103833, prec: 0.5%, recall: 94.0%, Time: 716.1 (f0.791+b3.422), maxima: 0.936
+4190.0s	152	Train Epoch: 3, Batch:180, Loss: 0.103657, prec: 0.5%, recall: 94.1%, Time: 758.0 (f0.790+b3.421), maxima: 0.925
+4232.0s	153	Train Epoch: 3, Batch:190, Loss: 0.103458, prec: 0.5%, recall: 94.2%, Time: 800.0 (f0.788+b3.422), maxima: 0.968
+4273.9s	154	Train Epoch: 3, Batch:200, Loss: 0.103537, prec: 0.5%, recall: 94.2%, Time: 841.9 (f0.787+b3.422), maxima: 0.876
+4316.0s	155	Train Epoch: 3, Batch:210, Loss: 0.103371, prec: 0.5%, recall: 94.2%, Time: 884.0 (f0.787+b3.422), maxima: 0.901
+4358.1s	156	Train Epoch: 3, Batch:220, Loss: 0.103064, prec: 0.5%, recall: 94.4%, Time: 926.0 (f0.787+b3.422), maxima: 0.929
+4400.1s	157	Train Epoch: 3, Batch:230, Loss: 0.102818, prec: 0.5%, recall: 94.4%, Time: 968.0 (f0.787+b3.422), maxima: 0.932
+4442.0s	158	Train Epoch: 3, Batch:240, Loss: 0.102450, prec: 0.5%, recall: 94.6%, Time: 1010.0 (f0.786+b3.422), maxima: 0.937
+4484.0s	159	Train Epoch: 3, Batch:250, Loss: 0.102258, prec: 0.5%, recall: 94.7%, Time: 1052.0 (f0.786+b3.422), maxima: 0.937
+4526.0s	160	Train Epoch: 3, Batch:260, Loss: 0.102241, prec: 0.5%, recall: 94.7%, Time: 1094.0 (f0.785+b3.423), maxima: 0.964
+4568.0s	161	Train Epoch: 3, Batch:270, Loss: 0.102019, prec: 0.5%, recall: 94.9%, Time: 1135.9 (f0.785+b3.422), maxima: 0.974
+4609.9s	162	Train Epoch: 3, Batch:280, Loss: 0.101839, prec: 0.5%, recall: 94.9%, Time: 1177.9 (f0.784+b3.422), maxima: 0.926
+4652.0s	163	Train Epoch: 3, Batch:290, Loss: 0.101732, prec: 0.5%, recall: 94.9%, Time: 1220.0 (f0.784+b3.423), maxima: 0.954
+4694.1s	164	Train Epoch: 3, Batch:300, Loss: 0.101949, prec: 0.5%, recall: 94.8%, Time: 1262.1 (f0.784+b3.423), maxima: 0.944
+4736.2s	165	Train Epoch: 3, Batch:310, Loss: 0.101940, prec: 0.5%, recall: 94.7%, Time: 1304.2 (f0.784+b3.423), maxima: 0.926
+4778.3s	166	Train Epoch: 3, Batch:320, Loss: 0.101942, prec: 0.5%, recall: 94.7%, Time: 1346.3 (f0.784+b3.424), maxima: 0.955
+4820.5s	167	Train Epoch: 3, Batch:330, Loss: 0.101908, prec: 0.5%, recall: 94.8%, Time: 1388.5 (f0.783+b3.424), maxima: 0.975
+4862.5s	168	Train Epoch: 3, Batch:340, Loss: 0.101803, prec: 0.5%, recall: 94.9%, Time: 1430.4 (f0.783+b3.424), maxima: 0.897
+4904.6s	169	Train Epoch: 3, Batch:350, Loss: 0.101971, prec: 0.5%, recall: 94.8%, Time: 1472.6 (f0.783+b3.425), maxima: 0.943
+4946.6s	170	Train Epoch: 3, Batch:360, Loss: 0.102032, prec: 0.5%, recall: 94.8%, Time: 1514.6 (f0.783+b3.424), maxima: 0.882
+4946.8s	171	Train Epoch: 3, Batch:360, Loss: 0.102032, Precision: 0.5%, Recall: 94.8%, Time: 1514.796
+4946.8s	172	[train] Epoch: 3, loss: 0.1020, precision_percent: 0.5159, recall_percent: 94.8185, duration_seconds: 1514.7961, bev/loss_positive: 0.0318, bev/loss_negative: 0.0010, bev/loss_mirror: 0.0027, bev/negative_weight: 0.1250, bev/brl_weight: 0.0000, bev/positive_cells: 877.1056, bev/halo_cells: 880.0917, bev/reliable_negative_cells: 688.0528, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.9306, bev/uncertain_cells: 40753.8194, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.9311, bev/max_consensus: 0.6282, view/loss_head_positive: 0.0604, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0550, view/loss_foot_negative: 0.0012, view/loss_foot_pseudo: 0.0000, view/head_positive_cells: 268.8579, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 127210.4496, view/foot_positive_cells: 287.1563, view/foot_negative_cells: 4.2472, view/foot_hard_negative_cells: 0.0000, view/foot_pseudo_cells: 0.0000, view/foot_uncertain_cells: 127164.2270, view/empty_views_skipped: 0.0147, view/ramp_factor: 0.0000, view/max_foot_support: 0.6760, GPU 0: 90% util, 323 MB allocated, GPU 1: 100% util, 34 MB allocated
+4946.8s	173	Testing...
+5042.3s	174	moda: 0.0%, modp: 74.7%, precision: 20.9%, recall: 99.5%
+5042.3s	175	Test, Loss: 0.107892, Precision: 1.5%, Recall: 96.8, 	Time: 94.288
+5042.3s	176	[validation] Epoch: 3, loss: 0.1079, grid_precision_percent: 1.5186, grid_recall_percent: 96.8375, moda_percent: 0.0000, modp_percent: 74.6898, detection_precision_percent: 20.9467, detection_recall_percent: 99.4748, duration_seconds: 94.2882, bev/loss_positive: 0.0308, bev/loss_negative: 0.0013, bev/loss_mirror: 0.0012, bev/negative_weight: 0.1250, bev/brl_weight: 0.0000, bev/positive_cells: 1577.6000, bev/halo_cells: 1385.8500, bev/reliable_negative_cells: 558.8500, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.0250, bev/uncertain_cells: 39677.6750, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.9006, bev/max_consensus: 0.6517, view/loss_head_positive: 0.0629, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0612, view/loss_foot_negative: 0.0008, view/loss_foot_pseudo: 0.0000, view/head_positive_cells: 581.7536, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 128567.6071, view/foot_positive_cells: 658.4607, view/foot_negative_cells: 1.0000, view/foot_hard_negative_cells: 0.0000, view/foot_pseudo_cells: 0.0000, view/foot_uncertain_cells: 128396.2286, view/empty_views_skipped: 0.0000, view/ramp_factor: 0.0000, view/max_foot_support: 0.7018, GPU 0: 0% util, 323 MB allocated, GPU 1: 0% util, 34 MB allocated
+5042.9s	177	
+ 30%|███████████▍                          | 3/10 [1:21:37<3:09:37, 1625.36s/it]Training...
+5088.1s	178	Train Epoch: 4, Batch:10, Loss: 0.093375, prec: 0.5%, recall: 98.3%, Time: 45.2 (f1.088+b3.432), maxima: 0.873
+5130.3s	179	Train Epoch: 4, Batch:20, Loss: 0.095309, prec: 0.5%, recall: 98.9%, Time: 87.4 (f0.943+b3.426), maxima: 0.970
+5172.3s	180	Train Epoch: 4, Batch:30, Loss: 0.094398, prec: 0.5%, recall: 98.7%, Time: 129.4 (f0.886+b3.429), maxima: 0.938
+5214.4s	181	Train Epoch: 4, Batch:40, Loss: 0.094157, prec: 0.5%, recall: 98.4%, Time: 171.5 (f0.859+b3.429), maxima: 0.931
+5256.7s	182	Train Epoch: 4, Batch:50, Loss: 0.094734, prec: 0.5%, recall: 97.9%, Time: 213.8 (f0.845+b3.430), maxima: 0.947
+5298.8s	183	Train Epoch: 4, Batch:60, Loss: 0.093494, prec: 0.5%, recall: 97.8%, Time: 255.9 (f0.835+b3.430), maxima: 0.948
+5340.8s	184	Train Epoch: 4, Batch:70, Loss: 0.093171, prec: 0.5%, recall: 97.8%, Time: 297.9 (f0.824+b3.432), maxima: 0.955
+5383.0s	185	Train Epoch: 4, Batch:80, Loss: 0.092168, prec: 0.5%, recall: 98.1%, Time: 340.1 (f0.819+b3.432), maxima: 0.961
+5424.9s	186	Train Epoch: 4, Batch:90, Loss: 0.092139, prec: 0.5%, recall: 98.1%, Time: 382.0 (f0.813+b3.432), maxima: 0.950
+5466.8s	187	Train Epoch: 4, Batch:100, Loss: 0.091450, prec: 0.5%, recall: 98.2%, Time: 423.9 (f0.808+b3.431), maxima: 0.959
+5508.6s	188	Train Epoch: 4, Batch:110, Loss: 0.091911, prec: 0.5%, recall: 98.2%, Time: 465.7 (f0.804+b3.430), maxima: 0.939
+5550.7s	189	Train Epoch: 4, Batch:120, Loss: 0.092152, prec: 0.5%, recall: 98.1%, Time: 507.8 (f0.801+b3.431), maxima: 0.969
+5592.9s	190	Train Epoch: 4, Batch:130, Loss: 0.092402, prec: 0.5%, recall: 98.0%, Time: 550.1 (f0.800+b3.431), maxima: 0.934
+5635.2s	191	Train Epoch: 4, Batch:140, Loss: 0.092738, prec: 0.5%, recall: 97.9%, Time: 592.3 (f0.799+b3.432), maxima: 0.971
+5677.7s	192	Train Epoch: 4, Batch:150, Loss: 0.092860, prec: 0.5%, recall: 97.9%, Time: 634.9 (f0.798+b3.434), maxima: 0.932
+5720.1s	193	Train Epoch: 4, Batch:160, Loss: 0.093462, prec: 0.5%, recall: 97.5%, Time: 677.3 (f0.797+b3.436), maxima: 0.958
+5762.3s	194	Train Epoch: 4, Batch:170, Loss: 0.093800, prec: 0.5%, recall: 97.5%, Time: 719.4 (f0.796+b3.436), maxima: 0.912
+5804.5s	195	Train Epoch: 4, Batch:180, Loss: 0.093922, prec: 0.5%, recall: 97.5%, Time: 761.6 (f0.795+b3.436), maxima: 0.946
+5846.4s	196	Train Epoch: 4, Batch:190, Loss: 0.093891, prec: 0.5%, recall: 97.3%, Time: 803.5 (f0.793+b3.436), maxima: 0.948
+5888.6s	197	Train Epoch: 4, Batch:200, Loss: 0.094231, prec: 0.5%, recall: 97.3%, Time: 845.7 (f0.792+b3.436), maxima: 0.948
+5931.0s	198	Train Epoch: 4, Batch:210, Loss: 0.094617, prec: 0.5%, recall: 97.2%, Time: 888.1 (f0.792+b3.438), maxima: 0.916
+5973.0s	199	Train Epoch: 4, Batch:220, Loss: 0.095007, prec: 0.5%, recall: 97.1%, Time: 930.1 (f0.790+b3.438), maxima: 0.933
+6015.1s	200	Train Epoch: 4, Batch:230, Loss: 0.095027, prec: 0.5%, recall: 97.2%, Time: 972.2 (f0.789+b3.438), maxima: 0.941
+6057.1s	201	Train Epoch: 4, Batch:240, Loss: 0.095432, prec: 0.5%, recall: 97.0%, Time: 1014.2 (f0.788+b3.438), maxima: 0.936
+6098.9s	202	Train Epoch: 4, Batch:250, Loss: 0.095773, prec: 0.5%, recall: 96.8%, Time: 1056.0 (f0.787+b3.437), maxima: 0.948
+6141.1s	203	Train Epoch: 4, Batch:260, Loss: 0.095761, prec: 0.5%, recall: 96.8%, Time: 1098.2 (f0.787+b3.437), maxima: 0.957
+6183.3s	204	Train Epoch: 4, Batch:270, Loss: 0.095655, prec: 0.5%, recall: 96.8%, Time: 1140.4 (f0.786+b3.438), maxima: 0.973
+6225.4s	205	Train Epoch: 4, Batch:280, Loss: 0.095504, prec: 0.5%, recall: 96.8%, Time: 1182.6 (f0.785+b3.438), maxima: 0.934
+6267.5s	206	Train Epoch: 4, Batch:290, Loss: 0.095482, prec: 0.5%, recall: 96.7%, Time: 1224.6 (f0.785+b3.438), maxima: 0.944
+6309.7s	207	Train Epoch: 4, Batch:300, Loss: 0.095274, prec: 0.5%, recall: 96.8%, Time: 1266.8 (f0.784+b3.438), maxima: 0.960
+6351.9s	208	Train Epoch: 4, Batch:310, Loss: 0.095234, prec: 0.5%, recall: 96.8%, Time: 1309.0 (f0.784+b3.438), maxima: 0.903
+6394.0s	209	Train Epoch: 4, Batch:320, Loss: 0.095227, prec: 0.5%, recall: 96.8%, Time: 1351.1 (f0.784+b3.438), maxima: 0.946
+6436.2s	210	Train Epoch: 4, Batch:330, Loss: 0.095136, prec: 0.5%, recall: 96.8%, Time: 1393.3 (f0.783+b3.439), maxima: 0.956
+6478.4s	211	Train Epoch: 4, Batch:340, Loss: 0.095137, prec: 0.5%, recall: 96.8%, Time: 1435.5 (f0.784+b3.439), maxima: 0.925
+6520.6s	212	Train Epoch: 4, Batch:350, Loss: 0.095150, prec: 0.5%, recall: 96.8%, Time: 1477.7 (f0.783+b3.439), maxima: 0.935
+6562.8s	213	Train Epoch: 4, Batch:360, Loss: 0.095284, prec: 0.5%, recall: 96.8%, Time: 1519.9 (f0.784+b3.438), maxima: 0.915
+6562.9s	214	Train Epoch: 4, Batch:360, Loss: 0.095284, Precision: 0.5%, Recall: 96.8%, Time: 1520.057
+6562.9s	215	[train] Epoch: 4, loss: 0.0953, precision_percent: 0.4715, recall_percent: 96.8379, duration_seconds: 1520.0573, bev/loss_positive: 0.0265, bev/loss_negative: 0.0003, bev/loss_mirror: 0.0045, bev/negative_weight: 0.2500, bev/brl_weight: 0.0333, bev/positive_cells: 877.1056, bev/halo_cells: 880.0917, bev/reliable_negative_cells: 910.1083, bev/hard_negative_cells: 0.1000, bev/mirror_cells: 1.8667, bev/uncertain_cells: 40530.8278, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.9428, bev/max_consensus: 0.6923, view/loss_head_positive: 0.0586, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0528, view/loss_foot_negative: 0.0087, view/loss_foot_pseudo: 0.0107, view/head_positive_cells: 268.8579, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 127210.4496, view/foot_positive_cells: 287.1563, view/foot_negative_cells: 97.7567, view/foot_hard_negative_cells: 0.1706, view/foot_pseudo_cells: 0.6147, view/foot_uncertain_cells: 127070.1028, view/empty_views_skipped: 0.0147, view/ramp_factor: 0.3333, view/max_foot_support: 0.7327, GPU 0: 59% util, 323 MB allocated, GPU 1: 100% util, 34 MB allocated
+6562.9s	216	Testing...
+6658.9s	217	moda: 0.0%, modp: 75.1%, precision: 17.9%, recall: 99.9%
+6658.9s	218	Test, Loss: 0.109813, Precision: 1.3%, Recall: 96.6, 	Time: 94.602
+6658.9s	219	[validation] Epoch: 4, loss: 0.1098, grid_precision_percent: 1.3330, grid_recall_percent: 96.5571, moda_percent: 0.0000, modp_percent: 75.1243, detection_precision_percent: 17.9299, detection_recall_percent: 99.8950, duration_seconds: 94.6022, bev/loss_positive: 0.0284, bev/loss_negative: 0.0001, bev/loss_mirror: 0.0091, bev/negative_weight: 0.2500, bev/brl_weight: 0.0333, bev/positive_cells: 1577.6000, bev/halo_cells: 1385.8500, bev/reliable_negative_cells: 968.4250, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.3500, bev/uncertain_cells: 39267.7750, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.9084, bev/max_consensus: 0.7015, view/loss_head_positive: 0.0623, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0623, view/loss_foot_negative: 0.0339, view/loss_foot_pseudo: 0.0099, view/head_positive_cells: 581.7536, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 128567.6071, view/foot_positive_cells: 658.4607, view/foot_negative_cells: 163.9357, view/foot_hard_negative_cells: 0.8107, view/foot_pseudo_cells: 0.3357, view/foot_uncertain_cells: 128232.9571, view/empty_views_skipped: 0.0000, view/ramp_factor: 0.3333, view/max_foot_support: 0.7288, GPU 0: 0% util, 323 MB allocated, GPU 1: 0% util, 34 MB allocated
+6659.4s	220	
+ 40%|███████████████▏                      | 4/10 [1:48:33<2:42:11, 1621.89s/it]Training...
+6704.9s	221	Train Epoch: 5, Batch:10, Loss: 0.089052, prec: 0.5%, recall: 96.6%, Time: 45.4 (f1.095+b3.446), maxima: 0.951
+6747.1s	222	Train Epoch: 5, Batch:20, Loss: 0.089652, prec: 0.5%, recall: 96.4%, Time: 87.7 (f0.938+b3.445), maxima: 0.952
+6789.4s	223	Train Epoch: 5, Batch:30, Loss: 0.087947, prec: 0.5%, recall: 97.4%, Time: 129.9 (f0.886+b3.446), maxima: 0.968
+6831.3s	224	Train Epoch: 5, Batch:40, Loss: 0.088426, prec: 0.5%, recall: 97.7%, Time: 171.8 (f0.856+b3.440), maxima: 0.956
+6873.2s	225	Train Epoch: 5, Batch:50, Loss: 0.088113, prec: 0.5%, recall: 97.4%, Time: 213.8 (f0.837+b3.439), maxima: 0.953
+6915.3s	226	Train Epoch: 5, Batch:60, Loss: 0.087089, prec: 0.5%, recall: 97.5%, Time: 255.9 (f0.829+b3.436), maxima: 0.952
+6957.7s	227	Train Epoch: 5, Batch:70, Loss: 0.086723, prec: 0.5%, recall: 97.9%, Time: 298.2 (f0.822+b3.439), maxima: 0.937
+7000.1s	228	Train Epoch: 5, Batch:80, Loss: 0.086174, prec: 0.5%, recall: 97.9%, Time: 340.6 (f0.815+b3.443), maxima: 0.978
+7042.2s	229	Train Epoch: 5, Batch:90, Loss: 0.086473, prec: 0.5%, recall: 97.9%, Time: 382.7 (f0.808+b3.444), maxima: 0.955
+7084.3s	230	Train Epoch: 5, Batch:100, Loss: 0.086903, prec: 0.5%, recall: 98.0%, Time: 424.9 (f0.805+b3.445), maxima: 0.949
+7126.5s	231	Train Epoch: 5, Batch:110, Loss: 0.086703, prec: 0.5%, recall: 98.0%, Time: 467.0 (f0.802+b3.444), maxima: 0.961
+7168.9s	232	Train Epoch: 5, Batch:120, Loss: 0.086669, prec: 0.5%, recall: 98.1%, Time: 509.4 (f0.801+b3.444), maxima: 0.955
+7211.1s	233	Train Epoch: 5, Batch:130, Loss: 0.087091, prec: 0.5%, recall: 98.1%, Time: 551.7 (f0.799+b3.444), maxima: 0.925
+7253.4s	234	Train Epoch: 5, Batch:140, Loss: 0.087769, prec: 0.5%, recall: 98.0%, Time: 594.0 (f0.798+b3.445), maxima: 0.955
+7295.6s	235	Train Epoch: 5, Batch:150, Loss: 0.087673, prec: 0.5%, recall: 98.0%, Time: 636.2 (f0.797+b3.444), maxima: 0.963
+7337.9s	236	Train Epoch: 5, Batch:160, Loss: 0.087816, prec: 0.5%, recall: 98.1%, Time: 678.5 (f0.796+b3.445), maxima: 0.956
+7380.1s	237	Train Epoch: 5, Batch:170, Loss: 0.087778, prec: 0.5%, recall: 98.1%, Time: 720.6 (f0.794+b3.445), maxima: 0.928
+7422.2s	238	Train Epoch: 5, Batch:180, Loss: 0.087961, prec: 0.5%, recall: 98.1%, Time: 762.8 (f0.793+b3.445), maxima: 0.962
+7464.4s	239	Train Epoch: 5, Batch:190, Loss: 0.087850, prec: 0.5%, recall: 98.1%, Time: 804.9 (f0.791+b3.445), maxima: 0.970
+6.1s	240	0.00s - Debugger warning: It seems that frozen modules are being used, which may
+6.1s	241	0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+6.1s	242	0.00s - to python to disable frozen modules.
+6.1s	243	0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+6.7s	244	0.00s - Debugger warning: It seems that frozen modules are being used, which may
+6.7s	245	0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+6.7s	246	0.00s - to python to disable frozen modules.
+6.7s	247	0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+7.7s	248	Cloning into 'MVDet'...
+8.3s	249	remote: Enumerating objects: 767, done.[K
+8.3s	250	remote: Counting objects:   0% (1/767)[K
+remote: Counting objects:   1% (8/767)[K
+remote: Counting objects:   2% (16/767)[K
+remote: Counting objects:   3% (24/767)[K
+remote: Counting objects:   4% (31/767)[K
+remote: Counting objects:   5% (39/767)[K
+remote: Counting objects:   6% (47/767)[K
+remote: Counting objects:   7% (54/767)[K
+remote: Counting objects:   8% (62/767)[K
+remote: Counting objects:   9% (70/767)[K
+remote: Counting objects:  10% (77/767)[K
+remote: Counting objects:  11% (85/767)[K
+remote: Counting objects:  12% (93/767)[K
+remote: Counting objects:  13% (100/767)[K
+remote: Counting objects:  14% (108/767)[K
+remote: Counting objects:  15% (116/767)[K
+remote: Counting objects:  16% (123/767)[K
+remote: Counting objects:  17% (131/767)[K
+remote: Counting objects:  18% (139/767)[K
+remote: Counting objects:  19% (146/767)[K
+remote: Counting objects:  20% (154/767)[K
+remote: Counting objects:  21% (162/767)[K
+remote: Counting objects:  22% (169/767)[K
+remote: Counting objects:  23% (177/767)[K
+remote: Counting objects:  24% (185/767)[K
+remote: Counting objects:  25% (192/767)[K
+remote: Counting objects:  26% (200/767)[K
+remote: Counting objects:  27% (208/767)[K
+remote: Counting objects:  28% (215/767)[K
+remote: Counting objects:  29% (223/767)[K
+remote: Counting objects:  30% (231/767)[K
+remote: Counting objects:  31% (238/767)[K
+remote: Counting objects:  32% (246/767)[K
+remote: Counting objects:  33% (254/767)[K
+remote: Counting objects:  34% (261/767)[K
+remote: Counting objects:  35% (269/767)[K
+remote: Counting objects:  36% (277/767)[K
+remote: Counting objects:  37% (284/767)[K
+remote: Counting objects:  38% (292/767)[K
+remote: Counting objects:  39% (300/767)[K
+remote: Counting objects:  40% (307/767)[K
+remote: Counting objects:  41% (315/767)[K
+remote: Counting objects:  42% (323/767)[K
+remote: Counting objects:  43% (330/767)[K
+remote: Counting objects:  44% (338/767)[K
+remote: Counting objects:  45% (346/767)[K
+remote: Counting objects:  46% (353/767)[K
+remote: Counting objects:  47% (361/767)[K
+remote: Counting objects:  48% (369/767)[K
+remote: Counting objects:  49% (376/767)[K
+remote: Counting objects:  50% (384/767)[K
+remote: Counting objects:  51% (392/767)[K
+remote: Counting objects:  52% (399/767)[K
+remote: Counting objects:  53% (407/767)[K
+remote: Counting objects:  54% (415/767)[K
+remote: Counting objects:  55% (422/767)[K
+remote: Counting objects:  56% (430/767)[K
+remote: Counting objects:  57% (438/767)[K
+remote: Counting objects:  58% (445/767)[K
+remote: Counting objects:  59% (453/767)[K
+remote: Counting objects:  60% (461/767)[K
+remote: Counting objects:  61% (468/767)[K
+remote: Counting objects:  62% (476/767)[K
+remote: Counting objects:  63% (484/767)[K
+remote: Counting objects:  64% (491/767)[K
+remote: Counting objects:  65% (499/767)[K
+remote: Counting objects:  66% (507/767)[K
+remote: Counting objects:  67% (514/767)[K
+remote: Counting objects:  68% (522/767)[K
+remote: Counting objects:  69% (530/767)[K
+remote: Counting objects:  70% (537/767)[K
+remote: Counting objects:  71% (545/767)[K
+remote: Counting objects:  72% (553/767)[K
+remote: Counting objects:  73% (560/767)[K
+remote: Counting objects:  74% (568/767)[K
+remote: Counting objects:  75% (576/767)[K
+remote: Counting objects:  76% (583/767)[K
+remote: Counting objects:  77% (591/767)[K
+remote: Counting objects:  78% (599/767)[K
+remote: Counting objects:  79% (606/767)[K
+remote: Counting objects:  80% (614/767)[K
+remote: Counting objects:  81% (622/767)[K
+remote: Counting objects:  82% (629/767)[K
+remote: Counting objects:  83% (637/767)[K
+remote: Counting objects:  84% (645/767)[K
+remote: Counting objects:  85% (652/767)[K
+remote: Counting objects:  86% (660/767)[K
+remote: Counting objects:  87% (668/767)[K
+remote: Counting objects:  88% (675/767)[K
+remote: Counting objects:  89% (683/767)[K
+remote: Counting objects:  90% (691/767)[K
+remote: Counting objects:  91% (698/767)[K
+remote: Counting objects:  92% (706/767)[K
+remote: Counting objects:  93% (714/767)[K
+remote: Counting objects:  94% (721/767)[K
+remote: Counting objects:  95% (729/767)[K
+remote: Counting objects:  96% (737/767)[K
+remote: Counting objects:  97% (744/767)[K
+remote: Counting objects:  98% (752/767)[K
+remote: Counting objects:  99% (760/767)[K
+remote: Counting objects: 100% (767/767)[K
+remote: Counting objects: 100% (767/767), done.[K
+8.3s	251	remote: Compressing objects:   0% (1/368)[K
+remote: Compressing objects:   1% (4/368)[K
+remote: Compressing objects:   2% (8/368)[K
+remote: Compressing objects:   3% (12/368)[K
+remote: Compressing objects:   4% (15/368)[K
+remote: Compressing objects:   5% (19/368)[K
+remote: Compressing objects:   6% (23/368)[K
+remote: Compressing objects:   7% (26/368)[K
+remote: Compressing objects:   8% (30/368)[K
+remote: Compressing objects:   9% (34/368)[K
+remote: Compressing objects:  10% (37/368)[K
+remote: Compressing objects:  11% (41/368)[K
+remote: Compressing objects:  12% (45/368)[K
+remote: Compressing objects:  13% (48/368)[K
+remote: Compressing objects:  14% (52/368)[K
+remote: Compressing objects:  15% (56/368)[K
+remote: Compressing objects:  16% (59/368)[K
+remote: Compressing objects:  17% (63/368)[K
+remote: Compressing objects:  18% (67/368)[K
+remote: Compressing objects:  19% (70/368)[K
+remote: Compressing objects:  20% (74/368)[K
+remote: Compressing objects:  21% (78/368)[K
+remote: Compressing objects:  22% (81/368)[K
+remote: Compressing objects:  23% (85/368)[K
+remote: Compressing objects:  24% (89/368)[K
+remote: Compressing objects:  25% (92/368)[K
+remote: Compressing objects:  26% (96/368)[K
+remote: Compressing objects:  27% (100/368)[K
+remote: Compressing objects:  28% (104/368)[K
+remote: Compressing objects:  29% (107/368)[K
+remote: Compressing objects:  30% (111/368)[K
+remote: Compressing objects:  31% (115/368)[K
+remote: Compressing objects:  32% (118/368)[K
+remote: Compressing objects:  33% (122/368)[K
+remote: Compressing objects:  34% (126/368)[K
+remote: Compressing objects:  35% (129/368)[K
+remote: Compressing objects:  36% (133/368)[K
+remote: Compressing objects:  37% (137/368)[K
+remote: Compressing objects:  38% (140/368)[K
+remote: Compressing objects:  39% (144/368)[K
+remote: Compressing objects:  40% (148/368)[K
+remote: Compressing objects:  41% (151/368)[K
+remote: Compressing objects:  42% (155/368)[K
+remote: Compressing objects:  43% (159/368)[K
+remote: Compressing objects:  44% (162/368)[K
+remote: Compressing objects:  45% (166/368)[K
+remote: Compressing objects:  46% (170/368)[K
+remote: Compressing objects:  47% (173/368)[K
+remote: Compressing objects:  48% (177/368)[K
+remote: Compressing objects:  49% (181/368)[K
+remote: Compressing objects:  50% (184/368)[K
+remote: Compressing objects:  51% (188/368)[K
+remote: Compressing objects:  52% (192/368)[K
+remote: Compressing objects:  53% (196/368)[K
+remote: Compressing objects:  54% (199/368)[K
+remote: Compressing objects:  55% (203/368)[K
+remote: Compressing objects:  56% (207/368)[K
+remote: Compressing objects:  57% (210/368)[K
+remote: Compressing objects:  58% (214/368)[K
+remote: Compressing objects:  59% (218/368)[K
+remote: Compressing objects:  60% (221/368)[K
+remote: Compressing objects:  61% (225/368)[K
+remote: Compressing objects:  62% (229/368)[K
+remote: Compressing objects:  63% (232/368)[K
+remote: Compressing objects:  64% (236/368)[K
+remote: Compressing objects:  65% (240/368)[K
+remote: Compressing objects:  66% (243/368)[K
+remote: Compressing objects:  67% (247/368)[K
+remote: Compressing objects:  68% (251/368)[K
+remote: Compressing objects:  69% (254/368)[K
+remote: Compressing objects:  70% (258/368)[K
+remote: Compressing objects:  71% (262/368)[K
+remote: Compressing objects:  72% (265/368)[K
+remote: Compressing objects:  73% (269/368)[K
+remote: Compressing objects:  74% (273/368)[K
+remote: Compressing objects:  75% (276/368)[K
+remote: Compressing objects:  76% (280/368)[K
+remote: Compressing objects:  77% (284/368)[K
+remote: Compressing objects:  78% (288/368)[K
+remote: Compressing objects:  79% (291/368)[K
+remote: Compressing objects:  80% (295/368)[K
+remote: Compressing objects:  81% (299/368)[K
+remote: Compressing objects:  82% (302/368)[K
+remote: Compressing objects:  83% (306/368)[K
+remote: Compressing objects:  84% (310/368)[K
+remote: Compressing objects:  85% (313/368)[K
+remote: Compressing objects:  86% (317/368)[K
+remote: Compressing objects:  87% (321/368)[K
+remote: Compressing objects:  88% (324/368)[K
+remote: Compressing objects:  89% (328/368)[K
+remote: Compressing objects:  90% (332/368)[K
+remote: Compressing objects:  91% (335/368)[K
+remote: Compressing objects:  92% (339/368)[K
+remote: Compressing objects:  93% (343/368)[K
+remote: Compressing objects:  94% (346/368)[K
+remote: Compressing objects:  95% (350/368)[K
+remote: Compressing objects:  96% (354/368)[K
+remote: Compressing objects:  97% (357/368)[K
+remote: Compressing objects:  98% (361/368)[K
+remote: Compressing objects:  99% (365/368)[K
+remote: Compressing objects: 100% (368/368)[K
+remote: Compressing objects: 100% (368/368), done.[K
+8.5s	252	Receiving objects:   0% (1/767)
+Receiving objects:   1% (8/767)
+Receiving objects:   2% (16/767)
+Receiving objects:   3% (24/767)
+Receiving objects:   4% (31/767)
+Receiving objects:   5% (39/767)
+Receiving objects:   6% (47/767)
+Receiving objects:   7% (54/767)
+Receiving objects:   8% (62/767)
+Receiving objects:   9% (70/767)
+Receiving objects:  10% (77/767)
+Receiving objects:  11% (85/767)
+Receiving objects:  12% (93/767)
+Receiving objects:  13% (100/767)
+Receiving objects:  14% (108/767)
+Receiving objects:  15% (116/767)
+Receiving objects:  16% (123/767)
+Receiving objects:  17% (131/767)
+Receiving objects:  18% (139/767)
+Receiving objects:  19% (146/767)
+Receiving objects:  20% (154/767)
+Receiving objects:  21% (162/767)
+Receiving objects:  22% (169/767)
+Receiving objects:  23% (177/767)
+Receiving objects:  24% (185/767)
+Receiving objects:  25% (192/767)
+Receiving objects:  26% (200/767)
+Receiving objects:  27% (208/767)
+Receiving objects:  28% (215/767)
+Receiving objects:  29% (223/767)
+Receiving objects:  30% (231/767)
+Receiving objects:  31% (238/767)
+Receiving objects:  32% (246/767)
+Receiving objects:  33% (254/767)
+Receiving objects:  34% (261/767)
+Receiving objects:  35% (269/767)
+Receiving objects:  36% (277/767)
+Receiving objects:  37% (284/767)
+Receiving objects:  38% (292/767)
+Receiving objects:  39% (300/767)
+Receiving objects:  40% (307/767)
+Receiving objects:  41% (315/767)
+Receiving objects:  42% (323/767)
+Receiving objects:  43% (330/767)
+Receiving objects:  44% (338/767)
+Receiving objects:  45% (346/767)
+Receiving objects:  46% (353/767)
+Receiving objects:  47% (361/767)
+Receiving objects:  48% (369/767)
+Receiving objects:  49% (376/767)
+Receiving objects:  50% (384/767)
+Receiving objects:  51% (392/767)
+Receiving objects:  52% (399/767)
+Receiving objects:  53% (407/767)
+Receiving objects:  54% (415/767)
+Receiving objects:  55% (422/767)
+Receiving objects:  56% (430/767)
+Receiving objects:  57% (438/767)
+Receiving objects:  58% (445/767)
+Receiving objects:  59% (453/767)
+Receiving objects:  60% (461/767)
+Receiving objects:  61% (468/767)
+Receiving objects:  62% (476/767)
+Receiving objects:  63% (484/767)
+Receiving objects:  64% (491/767)
+Receiving objects:  65% (499/767)
+Receiving objects:  66% (507/767)
+Receiving objects:  67% (514/767)
+Receiving objects:  68% (522/767)
+Receiving objects:  69% (530/767)
+Receiving objects:  70% (537/767)
+Receiving objects:  71% (545/767)
+Receiving objects:  72% (553/767)
+Receiving objects:  73% (560/767)
+Receiving objects:  74% (568/767)
+Receiving objects:  75% (576/767)
+Receiving objects:  76% (583/767)
+Receiving objects:  77% (591/767)
+Receiving objects:  78% (599/767)
+Receiving objects:  79% (606/767)
+Receiving objects:  80% (614/767)
+Receiving objects:  81% (622/767)
+Receiving objects:  82% (629/767)
+Receiving objects:  83% (637/767)
+Receiving objects:  84% (645/767)
+Receiving objects:  85% (652/767)
+Receiving objects:  86% (660/767)
+Receiving objects:  87% (668/767)
+Receiving objects:  88% (675/767)
+Receiving objects:  89% (683/767)
+Receiving objects:  90% (691/767)
+Receiving objects:  91% (698/767)
+Receiving objects:  92% (706/767)
+Receiving objects:  93% (714/767)
+Receiving objects:  94% (721/767)
+Receiving objects:  95% (729/767)
+Receiving objects:  96% (737/767)
+Receiving objects:  97% (744/767)
+Receiving objects:  98% (752/767)
+remote: Total 767 (delta 406), reused 736 (delta 375), pack-reused 0 (from 0)[K
+8.5s	253	Receiving objects:  99% (760/767)
+Receiving objects: 100% (767/767)
+Receiving objects: 100% (767/767), 3.60 MiB | 16.62 MiB/s, done.
+8.5s	254	Resolving deltas:   0% (0/406)
+Resolving deltas:   1% (5/406)
+Resolving deltas:   2% (9/406)
+Resolving deltas:   3% (13/406)
+Resolving deltas:   4% (17/406)
+Resolving deltas:   5% (21/406)
+Resolving deltas:   6% (25/406)
+Resolving deltas:   7% (29/406)
+Resolving deltas:   8% (33/406)
+Resolving deltas:   9% (37/406)
+Resolving deltas:  10% (41/406)
+Resolving deltas:  11% (45/406)
+Resolving deltas:  12% (49/406)
+Resolving deltas:  13% (53/406)
+Resolving deltas:  14% (57/406)
+Resolving deltas:  15% (61/406)
+Resolving deltas:  16% (65/406)
+Resolving deltas:  17% (70/406)
+Resolving deltas:  18% (74/406)
+Resolving deltas:  19% (78/406)
+Resolving deltas:  20% (82/406)
+Resolving deltas:  21% (86/406)
+Resolving deltas:  22% (90/406)
+Resolving deltas:  23% (94/406)
+Resolving deltas:  24% (98/406)
+Resolving deltas:  25% (102/406)
+Resolving deltas:  26% (106/406)
+Resolving deltas:  27% (110/406)
+Resolving deltas:  28% (114/406)
+Resolving deltas:  29% (118/406)
+Resolving deltas:  30% (122/406)
+Resolving deltas:  31% (126/406)
+Resolving deltas:  32% (130/406)
+Resolving deltas:  33% (134/406)
+Resolving deltas:  34% (139/406)
+Resolving deltas:  35% (143/406)
+Resolving deltas:  36% (147/406)
+Resolving deltas:  37% (151/406)
+Resolving deltas:  38% (155/406)
+Resolving deltas:  39% (159/406)
+Resolving deltas:  40% (163/406)
+Resolving deltas:  41% (167/406)
+Resolving deltas:  42% (171/406)
+Resolving deltas:  43% (175/406)
+Resolving deltas:  44% (179/406)
+Resolving deltas:  45% (183/406)
+Resolving deltas:  46% (187/406)
+Resolving deltas:  47% (191/406)
+Resolving deltas:  48% (195/406)
+Resolving deltas:  49% (199/406)
+Resolving deltas:  50% (203/406)
+Resolving deltas:  51% (208/406)
+Resolving deltas:  52% (212/406)
+Resolving deltas:  53% (216/406)
+Resolving deltas:  54% (220/406)
+Resolving deltas:  55% (224/406)
+Resolving deltas:  56% (228/406)
+Resolving deltas:  57% (232/406)
+Resolving deltas:  58% (236/406)
+Resolving deltas:  59% (240/406)
+Resolving deltas:  60% (244/406)
+Resolving deltas:  61% (248/406)
+Resolving deltas:  62% (252/406)
+Resolving deltas:  63% (256/406)
+Resolving deltas:  64% (260/406)
+Resolving deltas:  65% (264/406)
+Resolving deltas:  66% (268/406)
+Resolving deltas:  67% (273/406)
+Resolving deltas:  68% (277/406)
+Resolving deltas:  69% (281/406)
+Resolving deltas:  70% (285/406)
+Resolving deltas:  71% (289/406)
+Resolving deltas:  72% (293/406)
+Resolving deltas:  73% (297/406)
+Resolving deltas:  74% (301/406)
+Resolving deltas:  75% (305/406)
+Resolving deltas:  76% (309/406)
+Resolving deltas:  77% (313/406)
+Resolving deltas:  78% (317/406)
+Resolving deltas:  79% (321/406)
+Resolving deltas:  80% (325/406)
+Resolving deltas:  81% (329/406)
+Resolving deltas:  82% (333/406)
+Resolving deltas:  83% (337/406)
+Resolving deltas:  84% (342/406)
+Resolving deltas:  85% (346/406)
+Resolving deltas:  86% (350/406)
+Resolving deltas:  87% (354/406)
+Resolving deltas:  88% (358/406)
+Resolving deltas:  89% (362/406)
+Resolving deltas:  90% (366/406)
+Resolving deltas:  91% (370/406)
+Resolving deltas:  92% (374/406)
+Resolving deltas:  93% (378/406)
+Resolving deltas:  94% (382/406)
+Resolving deltas:  95% (386/406)
+Resolving deltas:  96% (390/406)
+Resolving deltas:  97% (394/406)
+Resolving deltas:  98% (399/406)
+Resolving deltas:  99% (402/406)
+Resolving deltas: 100% (406/406)
+Resolving deltas: 100% (406/406), done.
+8.7s	255	/kaggle/working/MVDet
+10.5s	256	Requirement already satisfied: wandb in /usr/local/lib/python3.12/dist-packages (0.26.1)
+10.5s	257	Requirement already satisfied: click>=8.0.1 in /usr/local/lib/python3.12/dist-packages (from wandb) (8.3.3)
+10.5s	258	Requirement already satisfied: gitpython!=3.1.29,>=1.0.0 in /usr/local/lib/python3.12/dist-packages (from wandb) (3.1.47)
+10.5s	259	Requirement already satisfied: packaging in /usr/local/lib/python3.12/dist-packages (from wandb) (26.1)
+10.5s	260	Requirement already satisfied: platformdirs in /usr/local/lib/python3.12/dist-packages (from wandb) (4.9.6)
+10.5s	261	Requirement already satisfied: protobuf!=5.28.0,!=5.29.0,<8,>4.21.0 in /usr/local/lib/python3.12/dist-packages (from wandb) (5.29.5)
+10.5s	262	Requirement already satisfied: pydantic<3 in /usr/local/lib/python3.12/dist-packages (from wandb) (2.12.3)
+10.5s	263	Requirement already satisfied: pyyaml in /usr/local/lib/python3.12/dist-packages (from wandb) (6.0.3)
+10.5s	264	Requirement already satisfied: requests<3,>=2.0.0 in /usr/local/lib/python3.12/dist-packages (from wandb) (2.32.4)
+10.5s	265	Requirement already satisfied: sentry-sdk>=2.0.0 in /usr/local/lib/python3.12/dist-packages (from wandb) (2.58.0)
+10.5s	266	Requirement already satisfied: typing-extensions<5,>=4.8 in /usr/local/lib/python3.12/dist-packages (from wandb) (4.15.0)
+10.5s	267	Requirement already satisfied: gitdb<5,>=4.0.1 in /usr/local/lib/python3.12/dist-packages (from gitpython!=3.1.29,>=1.0.0->wandb) (4.0.12)
+10.5s	268	Requirement already satisfied: annotated-types>=0.6.0 in /usr/local/lib/python3.12/dist-packages (from pydantic<3->wandb) (0.7.0)
+10.5s	269	Requirement already satisfied: pydantic-core==2.41.4 in /usr/local/lib/python3.12/dist-packages (from pydantic<3->wandb) (2.41.4)
+10.5s	270	Requirement already satisfied: typing-inspection>=0.4.2 in /usr/local/lib/python3.12/dist-packages (from pydantic<3->wandb) (0.4.2)
+10.5s	271	Requirement already satisfied: charset_normalizer<4,>=2 in /usr/local/lib/python3.12/dist-packages (from requests<3,>=2.0.0->wandb) (3.4.7)
+10.5s	272	Requirement already satisfied: idna<4,>=2.5 in /usr/local/lib/python3.12/dist-packages (from requests<3,>=2.0.0->wandb) (3.13)
+10.5s	273	Requirement already satisfied: urllib3<3,>=1.21.1 in /usr/local/lib/python3.12/dist-packages (from requests<3,>=2.0.0->wandb) (2.5.0)
+10.5s	274	Requirement already satisfied: certifi>=2017.4.17 in /usr/local/lib/python3.12/dist-packages (from requests<3,>=2.0.0->wandb) (2026.4.22)
+10.5s	275	Requirement already satisfied: smmap<6,>=3.0.1 in /usr/local/lib/python3.12/dist-packages (from gitdb<5,>=4.0.1->gitpython!=3.1.29,>=1.0.0->wandb) (5.0.3)
+12.8s	276	W&B key loaded: True
+25.1s	277	Located wildtrack dataset at /kaggle/input/datasets/aryashah2k/large-scale-multicamera-detection-dataset/Wildtrack
+29.0s	278	Using 45% dropped training annotations from /kaggle/input/datasets/lee735/thesis-dataset/Wildtrack_dropped/Wildtrack_dropped/drop45/annotations_positions
+29.0s	279	Hidden annotations (excluded from training): /kaggle/input/datasets/lee735/thesis-dataset/Wildtrack_dropped/Wildtrack_dropped/drop45/hidden_annotations_positions
+39.6s	280	Settings:
+39.6s	281	{'reID': False, 'cls_thres': 0.4, 'alpha': 1.0, 'loss': 'auto', 'variant': 'default', 'arch': 'resnet18', 'dataset': 'wildtrack', 'data_path': None, 'dropped_path': '/kaggle/input/datasets/lee735/thesis-dataset/Wildtrack_dropped/Wildtrack_dropped', 'pa': 45, 'num_workers': 4, 'batch_size': 1, 'epochs': 10, 'lr': 0.1, 'weight_decay': 0.0005, 'momentum': 0.5, 'log_interval': 10, 'resume': None, 'visualize': False, 'seed': 1, 'wandb_run_name': None, 'wandb_mode': 'disabled', 'brl_positive_threshold': 0.1, 'brl_ignore_threshold': 0.01, 'brl_negative_threshold': 0.15, 'brl_view_negative_threshold': 0.15, 'brl_bev_threshold': 0.6, 'brl_view_threshold': 0.55, 'brl_min_views': 2, 'brl_consensus_topk': 2, 'brl_local_max_kernel': 3, 'brl_positive_weight': 1.0, 'brl_negative_weight': 0.5, 'brl_weight': 0.1, 'brl_warmup_epochs': 3, 'brl_ramp_epochs': 3, 'brl_negative_warmup_factor': 0.25, 'brl_coverage_threshold': 0.5, 'brl_max_mirror_per_observed': 1.5, 'brl_occupancy_prior': 0.01, 'brl_no_consensus': False, 'view_positive_threshold': 0.1, 'view_ignore_threshold': 0.01, 'view_negative_threshold': 0.15, 'view_hard_negative_threshold': 0.6, 'view_pseudo_threshold': 0.6, 'view_support_negative_threshold': 0.15, 'view_support_positive_threshold': 0.55, 'view_positive_weight': 1.0, 'view_negative_weight': 0.25, 'view_pseudo_weight': 0.1, 'view_head_weight': 0.25, 'view_foot_weight': 1.0, 'view_head_negative_weight': 0.0, 'view_max_pseudo_per_observed': 1.5, 'view_occupancy_prior': 0.01, 'dataset_root': '/kaggle/input/datasets/aryashah2k/large-scale-multicamera-detection-dataset/Wildtrack', 'resolved_loss': 'bev_brl'}
+39.6s	282	Testing before training...
+145.6s	283	/kaggle/working/MVDet/multiview_detector/evaluation/pyeval/evaluateDetection.py:56: UserWarning: loadtxt: input contained no data: "/kaggle/working/MVDet/logs/wildtrack_frame/default/pa45/2026-09-09_10-22-25/test.txt"
+145.6s	284	  detRaw = np.loadtxt(res_fpath, ndmin=2)
+145.6s	285	moda: 0.0%, modp: 0.0%, precision: 0.0%, recall: 0.0%
+145.6s	286	Test, Loss: 0.481938, Precision: 0.0%, Recall: 0.0, 	Time: 105.391
+145.6s	287	[validation] Epoch: 0, loss: 0.4819, grid_precision_percent: 0.0000, grid_recall_percent: 0.0000, moda_percent: 0.0000, modp_percent: 0.0000, detection_precision_percent: 0.0000, detection_recall_percent: 0.0000, duration_seconds: 105.3909, bev/loss_positive: 0.2247, bev/loss_negative: 0.0000, bev/loss_mirror: 0.0000, bev/negative_weight: 0.1250, bev/brl_weight: 0.0000, bev/positive_cells: 1577.6000, bev/halo_cells: 1385.8500, bev/reliable_negative_cells: 40236.5500, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.0000, bev/uncertain_cells: 0.0000, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.0110, bev/max_consensus: 0.0192, view/loss_head_positive: 0.2138, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.2038, view/loss_foot_negative: 0.0000, view/loss_foot_pseudo: 0.0000, view/head_positive_cells: 581.7536, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 128567.6071, view/foot_positive_cells: 658.4607, view/foot_negative_cells: 91847.0643, view/foot_hard_negative_cells: 0.0000, view/foot_pseudo_cells: 0.0000, view/foot_uncertain_cells: 36550.1643, view/empty_views_skipped: 0.0000, view/ramp_factor: 0.0000, view/max_foot_support: 0.0108, GPU 0: 0% util, 113 MB allocated, GPU 1: 0% util, 11 MB allocated
+145.6s	288	
+  0%|                                                    | 0/10 [00:00<?, ?it/s]Training...
+251.0s	289	Train Epoch: 1, Batch:10, Loss: 0.468583, prec: 0.0%, recall: 0.0%, Time: 105.5 (f0.988+b9.558), maxima: 0.017
+294.7s	290	Train Epoch: 1, Batch:20, Loss: 0.444573, prec: 0.0%, recall: 0.6%, Time: 149.2 (f0.888+b6.570), maxima: 0.677
+337.5s	291	Train Epoch: 1, Batch:30, Loss: 0.420889, prec: 0.0%, recall: 14.6%, Time: 191.9 (f0.852+b5.545), maxima: 0.017
+380.3s	292	Train Epoch: 1, Batch:40, Loss: 0.411051, prec: 0.0%, recall: 11.0%, Time: 234.7 (f0.836+b5.033), maxima: 0.012
+422.8s	293	Train Epoch: 1, Batch:50, Loss: 0.400430, prec: 0.0%, recall: 8.8%, Time: 277.3 (f0.824+b4.721), maxima: 0.017
+465.1s	294	Train Epoch: 1, Batch:60, Loss: 0.388480, prec: 0.0%, recall: 7.3%, Time: 319.5 (f0.817+b4.508), maxima: 0.098
+507.2s	295	Train Epoch: 1, Batch:70, Loss: 0.368168, prec: 0.0%, recall: 10.9%, Time: 361.6 (f0.812+b4.353), maxima: 0.170
+549.3s	296	Train Epoch: 1, Batch:80, Loss: 0.350452, prec: 0.0%, recall: 13.2%, Time: 403.8 (f0.808+b4.239), maxima: 0.316
+591.5s	297	Train Epoch: 1, Batch:90, Loss: 0.332249, prec: 0.0%, recall: 17.0%, Time: 445.9 (f0.807+b4.148), maxima: 0.791
+633.6s	298	Train Epoch: 1, Batch:100, Loss: 0.318637, prec: 0.0%, recall: 18.2%, Time: 488.0 (f0.805+b4.075), maxima: 0.390
+675.8s	299	Train Epoch: 1, Batch:110, Loss: 0.307629, prec: 0.0%, recall: 19.1%, Time: 530.3 (f0.804+b4.016), maxima: 0.653
+717.8s	300	Train Epoch: 1, Batch:120, Loss: 0.296228, prec: 0.1%, recall: 20.7%, Time: 572.2 (f0.801+b3.967), maxima: 0.424
+759.8s	301	Train Epoch: 1, Batch:130, Loss: 0.285180, prec: 0.1%, recall: 22.6%, Time: 614.2 (f0.801+b3.924), maxima: 0.409
+801.8s	302	Train Epoch: 1, Batch:140, Loss: 0.276431, prec: 0.1%, recall: 24.0%, Time: 656.3 (f0.800+b3.887), maxima: 0.448
+843.8s	303	Train Epoch: 1, Batch:150, Loss: 0.268319, prec: 0.1%, recall: 25.5%, Time: 698.3 (f0.799+b3.857), maxima: 0.689
+885.7s	304	Train Epoch: 1, Batch:160, Loss: 0.260712, prec: 0.1%, recall: 27.3%, Time: 740.2 (f0.797+b3.829), maxima: 0.616
+927.5s	305	Train Epoch: 1, Batch:170, Loss: 0.254165, prec: 0.1%, recall: 29.0%, Time: 782.0 (f0.795+b3.804), maxima: 0.676
+969.6s	306	Train Epoch: 1, Batch:180, Loss: 0.248075, prec: 0.1%, recall: 30.5%, Time: 824.0 (f0.794+b3.783), maxima: 0.571
+1011.5s	307	Train Epoch: 1, Batch:190, Loss: 0.242575, prec: 0.1%, recall: 31.9%, Time: 865.9 (f0.794+b3.764), maxima: 0.334
+1053.4s	308	Train Epoch: 1, Batch:200, Loss: 0.239577, prec: 0.1%, recall: 32.6%, Time: 907.8 (f0.793+b3.747), maxima: 0.300
+1095.3s	309	Train Epoch: 1, Batch:210, Loss: 0.238933, prec: 0.1%, recall: 32.1%, Time: 949.7 (f0.791+b3.731), maxima: 0.158
+1137.3s	310	Train Epoch: 1, Batch:220, Loss: 0.238684, prec: 0.1%, recall: 31.9%, Time: 991.7 (f0.791+b3.717), maxima: 0.426
+1179.1s	311	Train Epoch: 1, Batch:230, Loss: 0.236945, prec: 0.2%, recall: 32.5%, Time: 1033.5 (f0.790+b3.703), maxima: 0.938
+1221.2s	312	Train Epoch: 1, Batch:240, Loss: 0.234514, prec: 0.2%, recall: 33.7%, Time: 1075.6 (f0.790+b3.691), maxima: 0.950
+1263.5s	313	Train Epoch: 1, Batch:250, Loss: 0.231545, prec: 0.2%, recall: 34.6%, Time: 1117.9 (f0.791+b3.681), maxima: 0.736
+1305.5s	314	Train Epoch: 1, Batch:260, Loss: 0.229472, prec: 0.2%, recall: 34.8%, Time: 1159.9 (f0.790+b3.671), maxima: 0.440
+1347.7s	315	Train Epoch: 1, Batch:270, Loss: 0.228278, prec: 0.2%, recall: 35.5%, Time: 1202.1 (f0.791+b3.661), maxima: 0.805
+1389.8s	316	Train Epoch: 1, Batch:280, Loss: 0.226419, prec: 0.2%, recall: 36.1%, Time: 1244.2 (f0.791+b3.653), maxima: 0.942
+1431.9s	317	Train Epoch: 1, Batch:290, Loss: 0.223853, prec: 0.2%, recall: 37.4%, Time: 1286.3 (f0.791+b3.645), maxima: 0.924
+1473.7s	318	Train Epoch: 1, Batch:300, Loss: 0.222337, prec: 0.2%, recall: 38.0%, Time: 1328.1 (f0.790+b3.637), maxima: 0.560
+1515.8s	319	Train Epoch: 1, Batch:310, Loss: 0.221677, prec: 0.3%, recall: 38.3%, Time: 1370.3 (f0.790+b3.630), maxima: 0.915
+1557.8s	320	Train Epoch: 1, Batch:320, Loss: 0.220001, prec: 0.3%, recall: 39.2%, Time: 1412.2 (f0.790+b3.623), maxima: 0.499
+1599.9s	321	Train Epoch: 1, Batch:330, Loss: 0.218694, prec: 0.3%, recall: 40.0%, Time: 1454.3 (f0.790+b3.617), maxima: 0.962
+1642.0s	322	Train Epoch: 1, Batch:340, Loss: 0.217959, prec: 0.4%, recall: 40.4%, Time: 1496.4 (f0.790+b3.611), maxima: 0.979
+1683.9s	323	Train Epoch: 1, Batch:350, Loss: 0.217175, prec: 0.4%, recall: 40.8%, Time: 1538.3 (f0.789+b3.606), maxima: 0.571
+1726.0s	324	Train Epoch: 1, Batch:360, Loss: 0.215690, prec: 0.4%, recall: 41.5%, Time: 1580.4 (f0.789+b3.601), maxima: 0.965
+1726.2s	325	Train Epoch: 1, Batch:360, Loss: 0.215690, Precision: 0.4%, Recall: 41.5%, Time: 1580.573
+1726.2s	326	[train] Epoch: 1, loss: 0.2157, precision_percent: 0.4271, recall_percent: 41.5361, duration_seconds: 1580.5731, bev/loss_positive: 0.1171, bev/loss_negative: 0.0002, bev/loss_mirror: 0.0012, bev/negative_weight: 0.1250, bev/brl_weight: 0.0000, bev/positive_cells: 877.1056, bev/halo_cells: 880.0917, bev/reliable_negative_cells: 3887.3111, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.1556, bev/uncertain_cells: 37555.3361, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.6032, bev/max_consensus: 0.5970, view/loss_head_positive: 0.0948, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0748, view/loss_foot_negative: 0.0006, view/loss_foot_pseudo: 0.0000, view/head_positive_cells: 268.8579, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 127210.4496, view/foot_positive_cells: 287.1563, view/foot_negative_cells: 14469.8972, view/foot_hard_negative_cells: 0.0000, view/foot_pseudo_cells: 0.0000, view/foot_uncertain_cells: 112698.5770, view/empty_views_skipped: 0.0147, view/ramp_factor: 0.0000, view/max_foot_support: 0.4681, GPU 0: 47% util, 323 MB allocated, GPU 1: 22% util, 34 MB allocated
+1726.2s	327	Testing...
+1820.5s	328	moda: 0.0%, modp: 66.7%, precision: 23.7%, recall: 8.3%
+1820.5s	329	Test, Loss: 0.229938, Precision: 1.5%, Recall: 4.6, 	Time: 93.692
+1820.5s	330	[validation] Epoch: 1, loss: 0.2299, grid_precision_percent: 1.4682, grid_recall_percent: 4.5833, moda_percent: 0.0000, modp_percent: 66.7263, detection_precision_percent: 23.6527, detection_recall_percent: 8.2983, duration_seconds: 93.6924, bev/loss_positive: 0.1494, bev/loss_negative: 0.0003, bev/loss_mirror: 0.0000, bev/negative_weight: 0.1250, bev/brl_weight: 0.0000, bev/positive_cells: 1577.6000, bev/halo_cells: 1385.8500, bev/reliable_negative_cells: 964.4500, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.0000, bev/uncertain_cells: 39272.1000, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.5869, bev/max_consensus: 0.6350, view/loss_head_positive: 0.0668, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0638, view/loss_foot_negative: 0.0000, view/loss_foot_pseudo: 0.0000, view/head_positive_cells: 581.7536, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 128567.6071, view/foot_positive_cells: 658.4607, view/foot_negative_cells: 0.0179, view/foot_hard_negative_cells: 0.0000, view/foot_pseudo_cells: 0.0000, view/foot_uncertain_cells: 128397.2107, view/empty_views_skipped: 0.0000, view/ramp_factor: 0.0000, view/max_foot_support: 0.4668, GPU 0: 0% util, 323 MB allocated, GPU 1: 0% util, 34 MB allocated
+1820.9s	331	
+ 10%|████                                    | 1/10 [27:55<4:11:17, 1675.31s/it]Training...
+1865.5s	332	Train Epoch: 2, Batch:10, Loss: 0.181322, prec: 0.6%, recall: 51.0%, Time: 44.6 (f1.014+b3.449), maxima: 0.980
+1907.5s	333	Train Epoch: 2, Batch:20, Loss: 0.176628, prec: 0.6%, recall: 58.4%, Time: 86.6 (f0.899+b3.432), maxima: 0.993
+1949.6s	334	Train Epoch: 2, Batch:30, Loss: 0.184913, prec: 0.8%, recall: 51.9%, Time: 128.7 (f0.863+b3.428), maxima: 0.865
+1991.8s	335	Train Epoch: 2, Batch:40, Loss: 0.180504, prec: 0.8%, recall: 57.3%, Time: 170.9 (f0.845+b3.428), maxima: 0.977
+2034.0s	336	Train Epoch: 2, Batch:50, Loss: 0.172846, prec: 0.7%, recall: 60.2%, Time: 213.1 (f0.832+b3.430), maxima: 0.935
+2076.1s	337	Train Epoch: 2, Batch:60, Loss: 0.169381, prec: 0.8%, recall: 62.8%, Time: 255.2 (f0.825+b3.428), maxima: 0.950
+2118.0s	338	Train Epoch: 2, Batch:70, Loss: 0.167734, prec: 0.8%, recall: 64.2%, Time: 297.1 (f0.820+b3.425), maxima: 0.988
+2160.0s	339	Train Epoch: 2, Batch:80, Loss: 0.169500, prec: 1.2%, recall: 62.5%, Time: 339.1 (f0.816+b3.422), maxima: 0.811
+2202.1s	340	Train Epoch: 2, Batch:90, Loss: 0.168473, prec: 1.2%, recall: 63.0%, Time: 381.2 (f0.811+b3.424), maxima: 0.994
+2243.9s	341	Train Epoch: 2, Batch:100, Loss: 0.165964, prec: 1.1%, recall: 63.4%, Time: 423.0 (f0.806+b3.424), maxima: 0.843
+2285.7s	342	Train Epoch: 2, Batch:110, Loss: 0.168554, prec: 1.3%, recall: 63.1%, Time: 464.8 (f0.802+b3.423), maxima: 1.000
+2327.7s	343	Train Epoch: 2, Batch:120, Loss: 0.168147, prec: 1.3%, recall: 63.2%, Time: 506.8 (f0.800+b3.423), maxima: 0.802
+2369.5s	344	Train Epoch: 2, Batch:130, Loss: 0.167074, prec: 1.2%, recall: 63.6%, Time: 548.7 (f0.797+b3.424), maxima: 0.969
+2411.6s	345	Train Epoch: 2, Batch:140, Loss: 0.165651, prec: 1.2%, recall: 64.4%, Time: 590.8 (f0.796+b3.424), maxima: 0.951
+2453.6s	346	Train Epoch: 2, Batch:150, Loss: 0.163615, prec: 1.1%, recall: 65.1%, Time: 632.8 (f0.795+b3.424), maxima: 0.886
+2495.6s	347	Train Epoch: 2, Batch:160, Loss: 0.160767, prec: 1.1%, recall: 66.6%, Time: 674.7 (f0.794+b3.424), maxima: 0.989
+2537.7s	348	Train Epoch: 2, Batch:170, Loss: 0.158360, prec: 1.1%, recall: 67.5%, Time: 716.8 (f0.794+b3.423), maxima: 0.911
+2579.7s	349	Train Epoch: 2, Batch:180, Loss: 0.157099, prec: 1.1%, recall: 67.8%, Time: 758.8 (f0.793+b3.423), maxima: 0.953
+2621.6s	350	Train Epoch: 2, Batch:190, Loss: 0.155845, prec: 1.1%, recall: 68.7%, Time: 800.7 (f0.791+b3.423), maxima: 0.906
+2663.7s	351	Train Epoch: 2, Batch:200, Loss: 0.154531, prec: 1.1%, recall: 69.2%, Time: 842.8 (f0.791+b3.423), maxima: 0.872
+2705.8s	352	Train Epoch: 2, Batch:210, Loss: 0.153037, prec: 1.1%, recall: 70.2%, Time: 884.9 (f0.791+b3.423), maxima: 0.980
+2747.7s	353	Train Epoch: 2, Batch:220, Loss: 0.151589, prec: 1.0%, recall: 70.6%, Time: 926.8 (f0.790+b3.423), maxima: 0.943
+2789.7s	354	Train Epoch: 2, Batch:230, Loss: 0.149980, prec: 1.0%, recall: 71.3%, Time: 968.8 (f0.789+b3.424), maxima: 0.921
+2831.8s	355	Train Epoch: 2, Batch:240, Loss: 0.148350, prec: 1.0%, recall: 72.2%, Time: 1010.9 (f0.788+b3.424), maxima: 0.953
+2873.9s	356	Train Epoch: 2, Batch:250, Loss: 0.146890, prec: 1.0%, recall: 72.9%, Time: 1053.0 (f0.788+b3.424), maxima: 0.855
+2915.8s	357	Train Epoch: 2, Batch:260, Loss: 0.145932, prec: 1.0%, recall: 73.4%, Time: 1094.9 (f0.787+b3.425), maxima: 0.996
+2957.7s	358	Train Epoch: 2, Batch:270, Loss: 0.145141, prec: 1.0%, recall: 73.5%, Time: 1136.9 (f0.786+b3.424), maxima: 0.932
+2999.7s	359	Train Epoch: 2, Batch:280, Loss: 0.144481, prec: 1.0%, recall: 74.0%, Time: 1178.8 (f0.786+b3.425), maxima: 0.978
+3041.7s	360	Train Epoch: 2, Batch:290, Loss: 0.143623, prec: 1.0%, recall: 74.4%, Time: 1220.8 (f0.785+b3.425), maxima: 0.979
+3083.7s	361	Train Epoch: 2, Batch:300, Loss: 0.143055, prec: 1.0%, recall: 74.6%, Time: 1262.8 (f0.784+b3.425), maxima: 0.985
+3125.6s	362	Train Epoch: 2, Batch:310, Loss: 0.142171, prec: 0.9%, recall: 74.9%, Time: 1304.7 (f0.783+b3.425), maxima: 0.973
+3167.4s	363	Train Epoch: 2, Batch:320, Loss: 0.141164, prec: 0.9%, recall: 75.3%, Time: 1346.6 (f0.782+b3.426), maxima: 0.886
+3209.5s	364	Train Epoch: 2, Batch:330, Loss: 0.140439, prec: 0.9%, recall: 75.6%, Time: 1388.6 (f0.782+b3.426), maxima: 0.892
+3251.6s	365	Train Epoch: 2, Batch:340, Loss: 0.139645, prec: 0.9%, recall: 76.0%, Time: 1430.7 (f0.782+b3.426), maxima: 0.935
+3293.7s	366	Train Epoch: 2, Batch:350, Loss: 0.138731, prec: 0.9%, recall: 76.3%, Time: 1472.8 (f0.783+b3.425), maxima: 0.947
+3335.6s	367	Train Epoch: 2, Batch:360, Loss: 0.137861, prec: 0.9%, recall: 76.8%, Time: 1514.7 (f0.783+b3.425), maxima: 0.911
+3335.8s	368	Train Epoch: 2, Batch:360, Loss: 0.137861, Precision: 0.9%, Recall: 76.8%, Time: 1514.927
+3335.8s	369	[train] Epoch: 2, loss: 0.1379, precision_percent: 0.8894, recall_percent: 76.7944, duration_seconds: 1514.9274, bev/loss_positive: 0.0621, bev/loss_negative: 0.0012, bev/loss_mirror: 0.0027, bev/negative_weight: 0.1250, bev/brl_weight: 0.0000, bev/positive_cells: 877.1056, bev/halo_cells: 880.0917, bev/reliable_negative_cells: 618.3250, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.6861, bev/uncertain_cells: 40823.7917, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.9273, bev/max_consensus: 0.6092, view/loss_head_positive: 0.0634, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0598, view/loss_foot_negative: 0.0010, view/loss_foot_pseudo: 0.0000, view/head_positive_cells: 268.8579, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 127210.4496, view/foot_positive_cells: 287.1563, view/foot_negative_cells: 3.2762, view/foot_hard_negative_cells: 0.0000, view/foot_pseudo_cells: 0.0000, view/foot_uncertain_cells: 127165.1980, view/empty_views_skipped: 0.0147, view/ramp_factor: 0.0000, view/max_foot_support: 0.6206, GPU 0: 92% util, 323 MB allocated, GPU 1: 78% util, 34 MB allocated
+3335.8s	370	Testing...
+3431.5s	371	moda: 0.0%, modp: 72.0%, precision: 15.0%, recall: 99.6%
+3431.5s	372	Test, Loss: 0.110187, Precision: 0.9%, Recall: 95.2, 	Time: 93.957
+3431.5s	373	[validation] Epoch: 2, loss: 0.1102, grid_precision_percent: 0.8854, grid_recall_percent: 95.1920, moda_percent: 0.0000, modp_percent: 71.9779, detection_precision_percent: 15.0405, detection_recall_percent: 99.5798, duration_seconds: 93.9565, bev/loss_positive: 0.0330, bev/loss_negative: 0.0018, bev/loss_mirror: 0.0000, bev/negative_weight: 0.1250, bev/brl_weight: 0.0000, bev/positive_cells: 1577.6000, bev/halo_cells: 1385.8500, bev/reliable_negative_cells: 398.6000, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.0000, bev/uncertain_cells: 39837.9500, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.9111, bev/max_consensus: 0.5841, view/loss_head_positive: 0.0644, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0609, view/loss_foot_negative: 0.0003, view/loss_foot_pseudo: 0.0000, view/head_positive_cells: 581.7536, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 128567.6071, view/foot_positive_cells: 658.4607, view/foot_negative_cells: 0.3857, view/foot_hard_negative_cells: 0.0000, view/foot_pseudo_cells: 0.0000, view/foot_uncertain_cells: 128396.8429, view/empty_views_skipped: 0.0000, view/ramp_factor: 0.0000, view/max_foot_support: 0.6232, GPU 0: 0% util, 323 MB allocated, GPU 1: 0% util, 34 MB allocated
+3432.0s	374	
+ 20%|████████                                | 2/10 [54:46<3:38:20, 1637.55s/it]Training...
+3477.3s	375	Train Epoch: 3, Batch:10, Loss: 0.104350, prec: 0.5%, recall: 93.9%, Time: 45.3 (f1.086+b3.442), maxima: 0.963
+3519.2s	376	Train Epoch: 3, Batch:20, Loss: 0.105370, prec: 0.6%, recall: 92.3%, Time: 87.2 (f0.933+b3.426), maxima: 0.885
+3561.1s	377	Train Epoch: 3, Batch:30, Loss: 0.103638, prec: 0.6%, recall: 93.8%, Time: 129.0 (f0.879+b3.422), maxima: 0.890
+3603.0s	378	Train Epoch: 3, Batch:40, Loss: 0.103021, prec: 0.6%, recall: 92.9%, Time: 171.0 (f0.850+b3.423), maxima: 0.983
+3645.0s	379	Train Epoch: 3, Batch:50, Loss: 0.102922, prec: 0.6%, recall: 92.9%, Time: 212.9 (f0.839+b3.420), maxima: 0.877
+3686.8s	380	Train Epoch: 3, Batch:60, Loss: 0.103055, prec: 0.5%, recall: 93.3%, Time: 254.8 (f0.829+b3.418), maxima: 0.943
+3728.8s	381	Train Epoch: 3, Batch:70, Loss: 0.102721, prec: 0.5%, recall: 93.1%, Time: 296.8 (f0.821+b3.418), maxima: 0.941
+3770.7s	382	Train Epoch: 3, Batch:80, Loss: 0.102933, prec: 0.5%, recall: 93.5%, Time: 338.7 (f0.815+b3.419), maxima: 0.966
+3812.6s	383	Train Epoch: 3, Batch:90, Loss: 0.102881, prec: 0.5%, recall: 93.4%, Time: 380.6 (f0.809+b3.419), maxima: 0.935
+3854.3s	384	Train Epoch: 3, Batch:100, Loss: 0.103339, prec: 0.5%, recall: 93.6%, Time: 422.2 (f0.805+b3.418), maxima: 0.923
+3896.2s	385	Train Epoch: 3, Batch:110, Loss: 0.103740, prec: 0.5%, recall: 93.9%, Time: 464.2 (f0.802+b3.418), maxima: 0.912
+3938.4s	386	Train Epoch: 3, Batch:120, Loss: 0.103583, prec: 0.5%, recall: 94.0%, Time: 506.3 (f0.800+b3.419), maxima: 0.938
+3980.4s	387	Train Epoch: 3, Batch:130, Loss: 0.103703, prec: 0.5%, recall: 93.9%, Time: 548.4 (f0.798+b3.420), maxima: 0.901
+4022.3s	388	Train Epoch: 3, Batch:140, Loss: 0.103979, prec: 0.5%, recall: 93.8%, Time: 590.2 (f0.796+b3.420), maxima: 0.845
+4064.2s	389	Train Epoch: 3, Batch:150, Loss: 0.104196, prec: 0.5%, recall: 93.8%, Time: 632.2 (f0.793+b3.421), maxima: 0.934
+4106.2s	390	Train Epoch: 3, Batch:160, Loss: 0.104169, prec: 0.5%, recall: 93.8%, Time: 674.2 (f0.792+b3.422), maxima: 0.984
+4148.1s	391	Train Epoch: 3, Batch:170, Loss: 0.103833, prec: 0.5%, recall: 94.0%, Time: 716.1 (f0.791+b3.422), maxima: 0.936
+4190.0s	392	Train Epoch: 3, Batch:180, Loss: 0.103657, prec: 0.5%, recall: 94.1%, Time: 758.0 (f0.790+b3.421), maxima: 0.925
+4232.0s	393	Train Epoch: 3, Batch:190, Loss: 0.103458, prec: 0.5%, recall: 94.2%, Time: 800.0 (f0.788+b3.422), maxima: 0.968
+4273.9s	394	Train Epoch: 3, Batch:200, Loss: 0.103537, prec: 0.5%, recall: 94.2%, Time: 841.9 (f0.787+b3.422), maxima: 0.876
+4316.0s	395	Train Epoch: 3, Batch:210, Loss: 0.103371, prec: 0.5%, recall: 94.2%, Time: 884.0 (f0.787+b3.422), maxima: 0.901
+4358.1s	396	Train Epoch: 3, Batch:220, Loss: 0.103064, prec: 0.5%, recall: 94.4%, Time: 926.0 (f0.787+b3.422), maxima: 0.929
+4400.1s	397	Train Epoch: 3, Batch:230, Loss: 0.102818, prec: 0.5%, recall: 94.4%, Time: 968.0 (f0.787+b3.422), maxima: 0.932
+4442.0s	398	Train Epoch: 3, Batch:240, Loss: 0.102450, prec: 0.5%, recall: 94.6%, Time: 1010.0 (f0.786+b3.422), maxima: 0.937
+4484.0s	399	Train Epoch: 3, Batch:250, Loss: 0.102258, prec: 0.5%, recall: 94.7%, Time: 1052.0 (f0.786+b3.422), maxima: 0.937
+4526.0s	400	Train Epoch: 3, Batch:260, Loss: 0.102241, prec: 0.5%, recall: 94.7%, Time: 1094.0 (f0.785+b3.423), maxima: 0.964
+4568.0s	401	Train Epoch: 3, Batch:270, Loss: 0.102019, prec: 0.5%, recall: 94.9%, Time: 1135.9 (f0.785+b3.422), maxima: 0.974
+4609.9s	402	Train Epoch: 3, Batch:280, Loss: 0.101839, prec: 0.5%, recall: 94.9%, Time: 1177.9 (f0.784+b3.422), maxima: 0.926
+4652.0s	403	Train Epoch: 3, Batch:290, Loss: 0.101732, prec: 0.5%, recall: 94.9%, Time: 1220.0 (f0.784+b3.423), maxima: 0.954
+4694.1s	404	Train Epoch: 3, Batch:300, Loss: 0.101949, prec: 0.5%, recall: 94.8%, Time: 1262.1 (f0.784+b3.423), maxima: 0.944
+4736.2s	405	Train Epoch: 3, Batch:310, Loss: 0.101940, prec: 0.5%, recall: 94.7%, Time: 1304.2 (f0.784+b3.423), maxima: 0.926
+4778.3s	406	Train Epoch: 3, Batch:320, Loss: 0.101942, prec: 0.5%, recall: 94.7%, Time: 1346.3 (f0.784+b3.424), maxima: 0.955
+4820.5s	407	Train Epoch: 3, Batch:330, Loss: 0.101908, prec: 0.5%, recall: 94.8%, Time: 1388.5 (f0.783+b3.424), maxima: 0.975
+4862.5s	408	Train Epoch: 3, Batch:340, Loss: 0.101803, prec: 0.5%, recall: 94.9%, Time: 1430.4 (f0.783+b3.424), maxima: 0.897
+4904.6s	409	Train Epoch: 3, Batch:350, Loss: 0.101971, prec: 0.5%, recall: 94.8%, Time: 1472.6 (f0.783+b3.425), maxima: 0.943
+4946.6s	410	Train Epoch: 3, Batch:360, Loss: 0.102032, prec: 0.5%, recall: 94.8%, Time: 1514.6 (f0.783+b3.424), maxima: 0.882
+4946.8s	411	Train Epoch: 3, Batch:360, Loss: 0.102032, Precision: 0.5%, Recall: 94.8%, Time: 1514.796
+4946.8s	412	[train] Epoch: 3, loss: 0.1020, precision_percent: 0.5159, recall_percent: 94.8185, duration_seconds: 1514.7961, bev/loss_positive: 0.0318, bev/loss_negative: 0.0010, bev/loss_mirror: 0.0027, bev/negative_weight: 0.1250, bev/brl_weight: 0.0000, bev/positive_cells: 877.1056, bev/halo_cells: 880.0917, bev/reliable_negative_cells: 688.0528, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.9306, bev/uncertain_cells: 40753.8194, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.9311, bev/max_consensus: 0.6282, view/loss_head_positive: 0.0604, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0550, view/loss_foot_negative: 0.0012, view/loss_foot_pseudo: 0.0000, view/head_positive_cells: 268.8579, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 127210.4496, view/foot_positive_cells: 287.1563, view/foot_negative_cells: 4.2472, view/foot_hard_negative_cells: 0.0000, view/foot_pseudo_cells: 0.0000, view/foot_uncertain_cells: 127164.2270, view/empty_views_skipped: 0.0147, view/ramp_factor: 0.0000, view/max_foot_support: 0.6760, GPU 0: 90% util, 323 MB allocated, GPU 1: 100% util, 34 MB allocated
+4946.8s	413	Testing...
+5042.3s	414	moda: 0.0%, modp: 74.7%, precision: 20.9%, recall: 99.5%
+5042.3s	415	Test, Loss: 0.107892, Precision: 1.5%, Recall: 96.8, 	Time: 94.288
+5042.3s	416	[validation] Epoch: 3, loss: 0.1079, grid_precision_percent: 1.5186, grid_recall_percent: 96.8375, moda_percent: 0.0000, modp_percent: 74.6898, detection_precision_percent: 20.9467, detection_recall_percent: 99.4748, duration_seconds: 94.2882, bev/loss_positive: 0.0308, bev/loss_negative: 0.0013, bev/loss_mirror: 0.0012, bev/negative_weight: 0.1250, bev/brl_weight: 0.0000, bev/positive_cells: 1577.6000, bev/halo_cells: 1385.8500, bev/reliable_negative_cells: 558.8500, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.0250, bev/uncertain_cells: 39677.6750, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.9006, bev/max_consensus: 0.6517, view/loss_head_positive: 0.0629, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0612, view/loss_foot_negative: 0.0008, view/loss_foot_pseudo: 0.0000, view/head_positive_cells: 581.7536, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 128567.6071, view/foot_positive_cells: 658.4607, view/foot_negative_cells: 1.0000, view/foot_hard_negative_cells: 0.0000, view/foot_pseudo_cells: 0.0000, view/foot_uncertain_cells: 128396.2286, view/empty_views_skipped: 0.0000, view/ramp_factor: 0.0000, view/max_foot_support: 0.7018, GPU 0: 0% util, 323 MB allocated, GPU 1: 0% util, 34 MB allocated
+5042.9s	417	
+ 30%|███████████▍                          | 3/10 [1:21:37<3:09:37, 1625.36s/it]Training...
+5088.1s	418	Train Epoch: 4, Batch:10, Loss: 0.093375, prec: 0.5%, recall: 98.3%, Time: 45.2 (f1.088+b3.432), maxima: 0.873
+5130.3s	419	Train Epoch: 4, Batch:20, Loss: 0.095309, prec: 0.5%, recall: 98.9%, Time: 87.4 (f0.943+b3.426), maxima: 0.970
+5172.3s	420	Train Epoch: 4, Batch:30, Loss: 0.094398, prec: 0.5%, recall: 98.7%, Time: 129.4 (f0.886+b3.429), maxima: 0.938
+5214.4s	421	Train Epoch: 4, Batch:40, Loss: 0.094157, prec: 0.5%, recall: 98.4%, Time: 171.5 (f0.859+b3.429), maxima: 0.931
+5256.7s	422	Train Epoch: 4, Batch:50, Loss: 0.094734, prec: 0.5%, recall: 97.9%, Time: 213.8 (f0.845+b3.430), maxima: 0.947
+5298.8s	423	Train Epoch: 4, Batch:60, Loss: 0.093494, prec: 0.5%, recall: 97.8%, Time: 255.9 (f0.835+b3.430), maxima: 0.948
+5340.8s	424	Train Epoch: 4, Batch:70, Loss: 0.093171, prec: 0.5%, recall: 97.8%, Time: 297.9 (f0.824+b3.432), maxima: 0.955
+5383.0s	425	Train Epoch: 4, Batch:80, Loss: 0.092168, prec: 0.5%, recall: 98.1%, Time: 340.1 (f0.819+b3.432), maxima: 0.961
+5424.9s	426	Train Epoch: 4, Batch:90, Loss: 0.092139, prec: 0.5%, recall: 98.1%, Time: 382.0 (f0.813+b3.432), maxima: 0.950
+5466.8s	427	Train Epoch: 4, Batch:100, Loss: 0.091450, prec: 0.5%, recall: 98.2%, Time: 423.9 (f0.808+b3.431), maxima: 0.959
+5508.6s	428	Train Epoch: 4, Batch:110, Loss: 0.091911, prec: 0.5%, recall: 98.2%, Time: 465.7 (f0.804+b3.430), maxima: 0.939
+5550.7s	429	Train Epoch: 4, Batch:120, Loss: 0.092152, prec: 0.5%, recall: 98.1%, Time: 507.8 (f0.801+b3.431), maxima: 0.969
+5592.9s	430	Train Epoch: 4, Batch:130, Loss: 0.092402, prec: 0.5%, recall: 98.0%, Time: 550.1 (f0.800+b3.431), maxima: 0.934
+5635.2s	431	Train Epoch: 4, Batch:140, Loss: 0.092738, prec: 0.5%, recall: 97.9%, Time: 592.3 (f0.799+b3.432), maxima: 0.971
+5677.7s	432	Train Epoch: 4, Batch:150, Loss: 0.092860, prec: 0.5%, recall: 97.9%, Time: 634.9 (f0.798+b3.434), maxima: 0.932
+5720.1s	433	Train Epoch: 4, Batch:160, Loss: 0.093462, prec: 0.5%, recall: 97.5%, Time: 677.3 (f0.797+b3.436), maxima: 0.958
+5762.3s	434	Train Epoch: 4, Batch:170, Loss: 0.093800, prec: 0.5%, recall: 97.5%, Time: 719.4 (f0.796+b3.436), maxima: 0.912
+5804.5s	435	Train Epoch: 4, Batch:180, Loss: 0.093922, prec: 0.5%, recall: 97.5%, Time: 761.6 (f0.795+b3.436), maxima: 0.946
+5846.4s	436	Train Epoch: 4, Batch:190, Loss: 0.093891, prec: 0.5%, recall: 97.3%, Time: 803.5 (f0.793+b3.436), maxima: 0.948
+5888.6s	437	Train Epoch: 4, Batch:200, Loss: 0.094231, prec: 0.5%, recall: 97.3%, Time: 845.7 (f0.792+b3.436), maxima: 0.948
+5931.0s	438	Train Epoch: 4, Batch:210, Loss: 0.094617, prec: 0.5%, recall: 97.2%, Time: 888.1 (f0.792+b3.438), maxima: 0.916
+5973.0s	439	Train Epoch: 4, Batch:220, Loss: 0.095007, prec: 0.5%, recall: 97.1%, Time: 930.1 (f0.790+b3.438), maxima: 0.933
+6015.1s	440	Train Epoch: 4, Batch:230, Loss: 0.095027, prec: 0.5%, recall: 97.2%, Time: 972.2 (f0.789+b3.438), maxima: 0.941
+6057.1s	441	Train Epoch: 4, Batch:240, Loss: 0.095432, prec: 0.5%, recall: 97.0%, Time: 1014.2 (f0.788+b3.438), maxima: 0.936
+6098.9s	442	Train Epoch: 4, Batch:250, Loss: 0.095773, prec: 0.5%, recall: 96.8%, Time: 1056.0 (f0.787+b3.437), maxima: 0.948
+6141.1s	443	Train Epoch: 4, Batch:260, Loss: 0.095761, prec: 0.5%, recall: 96.8%, Time: 1098.2 (f0.787+b3.437), maxima: 0.957
+6183.3s	444	Train Epoch: 4, Batch:270, Loss: 0.095655, prec: 0.5%, recall: 96.8%, Time: 1140.4 (f0.786+b3.438), maxima: 0.973
+6225.4s	445	Train Epoch: 4, Batch:280, Loss: 0.095504, prec: 0.5%, recall: 96.8%, Time: 1182.6 (f0.785+b3.438), maxima: 0.934
+6267.5s	446	Train Epoch: 4, Batch:290, Loss: 0.095482, prec: 0.5%, recall: 96.7%, Time: 1224.6 (f0.785+b3.438), maxima: 0.944
+6309.7s	447	Train Epoch: 4, Batch:300, Loss: 0.095274, prec: 0.5%, recall: 96.8%, Time: 1266.8 (f0.784+b3.438), maxima: 0.960
+6351.9s	448	Train Epoch: 4, Batch:310, Loss: 0.095234, prec: 0.5%, recall: 96.8%, Time: 1309.0 (f0.784+b3.438), maxima: 0.903
+6394.0s	449	Train Epoch: 4, Batch:320, Loss: 0.095227, prec: 0.5%, recall: 96.8%, Time: 1351.1 (f0.784+b3.438), maxima: 0.946
+6436.2s	450	Train Epoch: 4, Batch:330, Loss: 0.095136, prec: 0.5%, recall: 96.8%, Time: 1393.3 (f0.783+b3.439), maxima: 0.956
+6478.4s	451	Train Epoch: 4, Batch:340, Loss: 0.095137, prec: 0.5%, recall: 96.8%, Time: 1435.5 (f0.784+b3.439), maxima: 0.925
+6520.6s	452	Train Epoch: 4, Batch:350, Loss: 0.095150, prec: 0.5%, recall: 96.8%, Time: 1477.7 (f0.783+b3.439), maxima: 0.935
+6562.8s	453	Train Epoch: 4, Batch:360, Loss: 0.095284, prec: 0.5%, recall: 96.8%, Time: 1519.9 (f0.784+b3.438), maxima: 0.915
+6562.9s	454	Train Epoch: 4, Batch:360, Loss: 0.095284, Precision: 0.5%, Recall: 96.8%, Time: 1520.057
+6562.9s	455	[train] Epoch: 4, loss: 0.0953, precision_percent: 0.4715, recall_percent: 96.8379, duration_seconds: 1520.0573, bev/loss_positive: 0.0265, bev/loss_negative: 0.0003, bev/loss_mirror: 0.0045, bev/negative_weight: 0.2500, bev/brl_weight: 0.0333, bev/positive_cells: 877.1056, bev/halo_cells: 880.0917, bev/reliable_negative_cells: 910.1083, bev/hard_negative_cells: 0.1000, bev/mirror_cells: 1.8667, bev/uncertain_cells: 40530.8278, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.9428, bev/max_consensus: 0.6923, view/loss_head_positive: 0.0586, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0528, view/loss_foot_negative: 0.0087, view/loss_foot_pseudo: 0.0107, view/head_positive_cells: 268.8579, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 127210.4496, view/foot_positive_cells: 287.1563, view/foot_negative_cells: 97.7567, view/foot_hard_negative_cells: 0.1706, view/foot_pseudo_cells: 0.6147, view/foot_uncertain_cells: 127070.1028, view/empty_views_skipped: 0.0147, view/ramp_factor: 0.3333, view/max_foot_support: 0.7327, GPU 0: 59% util, 323 MB allocated, GPU 1: 100% util, 34 MB allocated
+6562.9s	456	Testing...
+6658.9s	457	moda: 0.0%, modp: 75.1%, precision: 17.9%, recall: 99.9%
+6658.9s	458	Test, Loss: 0.109813, Precision: 1.3%, Recall: 96.6, 	Time: 94.602
+6658.9s	459	[validation] Epoch: 4, loss: 0.1098, grid_precision_percent: 1.3330, grid_recall_percent: 96.5571, moda_percent: 0.0000, modp_percent: 75.1243, detection_precision_percent: 17.9299, detection_recall_percent: 99.8950, duration_seconds: 94.6022, bev/loss_positive: 0.0284, bev/loss_negative: 0.0001, bev/loss_mirror: 0.0091, bev/negative_weight: 0.2500, bev/brl_weight: 0.0333, bev/positive_cells: 1577.6000, bev/halo_cells: 1385.8500, bev/reliable_negative_cells: 968.4250, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.3500, bev/uncertain_cells: 39267.7750, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.9084, bev/max_consensus: 0.7015, view/loss_head_positive: 0.0623, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0623, view/loss_foot_negative: 0.0339, view/loss_foot_pseudo: 0.0099, view/head_positive_cells: 581.7536, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 128567.6071, view/foot_positive_cells: 658.4607, view/foot_negative_cells: 163.9357, view/foot_hard_negative_cells: 0.8107, view/foot_pseudo_cells: 0.3357, view/foot_uncertain_cells: 128232.9571, view/empty_views_skipped: 0.0000, view/ramp_factor: 0.3333, view/max_foot_support: 0.7288, GPU 0: 0% util, 323 MB allocated, GPU 1: 0% util, 34 MB allocated
+6659.4s	460	
+ 40%|███████████████▏                      | 4/10 [1:48:33<2:42:11, 1621.89s/it]Training...
+6704.9s	461	Train Epoch: 5, Batch:10, Loss: 0.089052, prec: 0.5%, recall: 96.6%, Time: 45.4 (f1.095+b3.446), maxima: 0.951
+6747.1s	462	Train Epoch: 5, Batch:20, Loss: 0.089652, prec: 0.5%, recall: 96.4%, Time: 87.7 (f0.938+b3.445), maxima: 0.952
+6789.4s	463	Train Epoch: 5, Batch:30, Loss: 0.087947, prec: 0.5%, recall: 97.4%, Time: 129.9 (f0.886+b3.446), maxima: 0.968
+6831.3s	464	Train Epoch: 5, Batch:40, Loss: 0.088426, prec: 0.5%, recall: 97.7%, Time: 171.8 (f0.856+b3.440), maxima: 0.956
+6873.2s	465	Train Epoch: 5, Batch:50, Loss: 0.088113, prec: 0.5%, recall: 97.4%, Time: 213.8 (f0.837+b3.439), maxima: 0.953
+6915.3s	466	Train Epoch: 5, Batch:60, Loss: 0.087089, prec: 0.5%, recall: 97.5%, Time: 255.9 (f0.829+b3.436), maxima: 0.952
+6957.7s	467	Train Epoch: 5, Batch:70, Loss: 0.086723, prec: 0.5%, recall: 97.9%, Time: 298.2 (f0.822+b3.439), maxima: 0.937
+7000.1s	468	Train Epoch: 5, Batch:80, Loss: 0.086174, prec: 0.5%, recall: 97.9%, Time: 340.6 (f0.815+b3.443), maxima: 0.978
+7042.2s	469	Train Epoch: 5, Batch:90, Loss: 0.086473, prec: 0.5%, recall: 97.9%, Time: 382.7 (f0.808+b3.444), maxima: 0.955
+7084.3s	470	Train Epoch: 5, Batch:100, Loss: 0.086903, prec: 0.5%, recall: 98.0%, Time: 424.9 (f0.805+b3.445), maxima: 0.949
+7126.5s	471	Train Epoch: 5, Batch:110, Loss: 0.086703, prec: 0.5%, recall: 98.0%, Time: 467.0 (f0.802+b3.444), maxima: 0.961
+7168.9s	472	Train Epoch: 5, Batch:120, Loss: 0.086669, prec: 0.5%, recall: 98.1%, Time: 509.4 (f0.801+b3.444), maxima: 0.955
+7211.1s	473	Train Epoch: 5, Batch:130, Loss: 0.087091, prec: 0.5%, recall: 98.1%, Time: 551.7 (f0.799+b3.444), maxima: 0.925
+7253.4s	474	Train Epoch: 5, Batch:140, Loss: 0.087769, prec: 0.5%, recall: 98.0%, Time: 594.0 (f0.798+b3.445), maxima: 0.955
+7295.6s	475	Train Epoch: 5, Batch:150, Loss: 0.087673, prec: 0.5%, recall: 98.0%, Time: 636.2 (f0.797+b3.444), maxima: 0.963
+7337.9s	476	Train Epoch: 5, Batch:160, Loss: 0.087816, prec: 0.5%, recall: 98.1%, Time: 678.5 (f0.796+b3.445), maxima: 0.956
+7380.1s	477	Train Epoch: 5, Batch:170, Loss: 0.087778, prec: 0.5%, recall: 98.1%, Time: 720.6 (f0.794+b3.445), maxima: 0.928
+7422.2s	478	Train Epoch: 5, Batch:180, Loss: 0.087961, prec: 0.5%, recall: 98.1%, Time: 762.8 (f0.793+b3.445), maxima: 0.962
+7464.4s	479	Train Epoch: 5, Batch:190, Loss: 0.087850, prec: 0.5%, recall: 98.1%, Time: 804.9 (f0.791+b3.445), maxima: 0.970
+7506.6s	480	Train Epoch: 5, Batch:200, Loss: 0.088080, prec: 0.5%, recall: 98.1%, Time: 847.2 (f0.790+b3.445), maxima: 0.959
+7548.8s	481	Train Epoch: 5, Batch:210, Loss: 0.088226, prec: 0.5%, recall: 98.0%, Time: 889.4 (f0.790+b3.445), maxima: 0.957
+7590.9s	482	Train Epoch: 5, Batch:220, Loss: 0.088014, prec: 0.5%, recall: 98.1%, Time: 931.5 (f0.789+b3.445), maxima: 0.965
+7632.9s	483	Train Epoch: 5, Batch:230, Loss: 0.088284, prec: 0.5%, recall: 98.0%, Time: 973.5 (f0.788+b3.445), maxima: 0.961
+7675.1s	484	Train Epoch: 5, Batch:240, Loss: 0.088564, prec: 0.5%, recall: 98.0%, Time: 1015.6 (f0.787+b3.445), maxima: 0.979
+7717.3s	485	Train Epoch: 5, Batch:250, Loss: 0.088574, prec: 0.4%, recall: 98.1%, Time: 1057.9 (f0.787+b3.444), maxima: 0.990
+7759.6s	486	Train Epoch: 5, Batch:260, Loss: 0.088717, prec: 0.4%, recall: 98.1%, Time: 1100.1 (f0.786+b3.445), maxima: 0.976
+7801.9s	487	Train Epoch: 5, Batch:270, Loss: 0.088776, prec: 0.4%, recall: 98.1%, Time: 1142.5 (f0.786+b3.445), maxima: 0.961
+7844.2s	488	Train Epoch: 5, Batch:280, Loss: 0.088980, prec: 0.4%, recall: 98.1%, Time: 1184.8 (f0.786+b3.446), maxima: 0.967
+7886.4s	489	Train Epoch: 5, Batch:290, Loss: 0.089140, prec: 0.4%, recall: 98.1%, Time: 1226.9 (f0.785+b3.446), maxima: 0.946
+7928.5s	490	Train Epoch: 5, Batch:300, Loss: 0.089069, prec: 0.4%, recall: 98.1%, Time: 1269.1 (f0.785+b3.445), maxima: 0.990
+7970.8s	491	Train Epoch: 5, Batch:310, Loss: 0.089085, prec: 0.4%, recall: 98.0%, Time: 1311.3 (f0.785+b3.446), maxima: 0.952
+8013.0s	492	Train Epoch: 5, Batch:320, Loss: 0.089240, prec: 0.4%, recall: 98.1%, Time: 1353.6 (f0.784+b3.446), maxima: 0.980
+8055.0s	493	Train Epoch: 5, Batch:330, Loss: 0.089457, prec: 0.4%, recall: 98.0%, Time: 1395.6 (f0.783+b3.446), maxima: 0.971
+8097.2s	494	Train Epoch: 5, Batch:340, Loss: 0.089567, prec: 0.4%, recall: 98.0%, Time: 1437.7 (f0.783+b3.446), maxima: 0.968
+8139.4s	495	Train Epoch: 5, Batch:350, Loss: 0.089747, prec: 0.4%, recall: 98.0%, Time: 1480.0 (f0.782+b3.446), maxima: 0.962
+8181.4s	496	Train Epoch: 5, Batch:360, Loss: 0.089851, prec: 0.4%, recall: 98.0%, Time: 1522.0 (f0.782+b3.446), maxima: 0.943
+8181.6s	497	Train Epoch: 5, Batch:360, Loss: 0.089851, Precision: 0.4%, Recall: 98.0%, Time: 1522.139
+8181.6s	498	[train] Epoch: 5, loss: 0.0899, precision_percent: 0.4221, recall_percent: 97.9951, duration_seconds: 1522.1385, bev/loss_positive: 0.0231, bev/loss_negative: 0.0002, bev/loss_mirror: 0.0054, bev/negative_weight: 0.3750, bev/brl_weight: 0.0667, bev/positive_cells: 877.1056, bev/halo_cells: 880.0917, bev/reliable_negative_cells: 1099.5889, bev/hard_negative_cells: 0.1222, bev/mirror_cells: 3.9833, bev/uncertain_cells: 40339.2306, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.9595, bev/max_consensus: 0.7986, view/loss_head_positive: 0.0573, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0506, view/loss_foot_negative: 0.0029, view/loss_foot_pseudo: 0.0134, view/head_positive_cells: 268.8579, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 127210.4496, view/foot_positive_cells: 287.1563, view/foot_negative_cells: 516.9675, view/foot_hard_negative_cells: 0.5409, view/foot_pseudo_cells: 1.4913, view/foot_uncertain_cells: 126650.0155, view/empty_views_skipped: 0.0147, view/ramp_factor: 0.6667, view/max_foot_support: 0.8078, GPU 0: 73% util, 323 MB allocated, GPU 1: 53% util, 34 MB allocated
+8181.6s	499	Testing...
+8278.7s	500	moda: 0.0%, modp: 75.1%, precision: 8.9%, recall: 99.8%
+8278.7s	501	Test, Loss: 0.107131, Precision: 0.6%, Recall: 97.7, 	Time: 94.401
+8278.7s	502	[validation] Epoch: 5, loss: 0.1071, grid_precision_percent: 0.5621, grid_recall_percent: 97.7275, moda_percent: 0.0000, modp_percent: 75.1384, detection_precision_percent: 8.8851, detection_recall_percent: 99.7899, duration_seconds: 94.4006, bev/loss_positive: 0.0292, bev/loss_negative: 0.0002, bev/loss_mirror: 0.0034, bev/negative_weight: 0.3750, bev/brl_weight: 0.0667, bev/positive_cells: 1577.6000, bev/halo_cells: 1385.8500, bev/reliable_negative_cells: 995.1500, bev/hard_negative_cells: 0.0000, bev/mirror_cells: 0.9000, bev/uncertain_cells: 39240.5000, bev/visible_cells: 43200.0000, bev/empty_samples_skipped: 0.0000, bev/max_probability: 0.9363, bev/max_consensus: 0.6887, view/loss_head_positive: 0.0615, view/loss_head_negative: 0.0000, view/loss_foot_positive: 0.0607, view/loss_foot_negative: 0.0051, view/loss_foot_pseudo: 0.0105, view/head_positive_cells: 581.7536, view/head_negative_cells: 0.0000, view/head_uncertain_cells: 128567.6071, view/foot_positive_cells: 658.4607, view/foot_negative_cells: 372.2643, view/foot_hard_negative_cells: 0.3536, view/foot_pseudo_cells: 0.4036, view/foot_uncertain_cells: 128024.5607, view/empty_views_skipped: 0.0000, view/ramp_factor: 0.6667, view/max_foot_support: 0.7424, GPU 0: 0% util, 323 MB allocated, GPU 1: 0% util, 34 MB allocated

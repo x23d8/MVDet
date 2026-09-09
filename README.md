@@ -171,12 +171,23 @@ and leave-one-view-out camera consensus agree. Reliable foot negatives also
 require valid multi-camera ground-plane coverage. Confidence-derived masks are
 detached from autograd.
 
+After warm-up, low external consensus selects the complete reliable-negative
+set; current prediction confidence only separates its hard subset. This avoids
+the previous gap where cells above the easy-negative cutoff but below the
+mirror threshold received no negative gradient despite crossing the inference
+threshold. BEV hard negatives default to confidence `0.40`, while mirror
+positives retain the stricter `0.60` threshold. The analogous foot thresholds
+are also separate. The default schedule uses one warm-up epoch and a two-epoch
+ramp for a ten-epoch run. The partial-label head weight defaults to `0.05` and
+its unlabelled negative weight remains zero.
+
 The default and `no_joint_conv` variants continue to project their C-channel
 backbone features unchanged. In `res_proj`, foot logits are converted to
 probabilities before projection. `img_proj` has no learned camera head, so its
 view loss and view consensus are disabled.
 
 Useful controls include `--brl_warmup_epochs`, `--brl_ramp_epochs`,
+`--brl_hard_negative_threshold`, `--brl_mirror_threshold`,
 `--brl_min_views`, `--brl_consensus_topk`, `--view_head_weight`, and
 `--view_foot_weight`. Keep `--view_head_negative_weight 0` unless an independent
 teacher or calibrated head-height model is added.

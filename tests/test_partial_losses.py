@@ -136,6 +136,69 @@ class BEVBRLLossTest(unittest.TestCase):
             self.assertAlmostEqual(criterion.current_negative_weight, negative_weight)
             self.assertAlmostEqual(criterion.current_brl_weight, mirror_weight)
 
+    def test_low_consensus_prediction_cannot_escape_negative_loss_after_warmup(self):
+        criterion = BEVBRLLoss(
+            positive_threshold=0.1,
+            ignore_threshold=0.01,
+            negative_threshold=0.15,
+            view_negative_threshold=0.3,
+            hard_negative_threshold=0.4,
+            mirror_threshold=0.6,
+            warmup_epochs=1,
+            ramp_epochs=1,
+        )
+        criterion.set_epoch(2)
+        logits = torch.full((1, 1, 9, 9), -4.0, requires_grad=True)
+        target = torch.zeros_like(logits)
+        target[0, 0, 4, 4] = 1
+        with torch.no_grad():
+            # Probability 0.5 is above the detection threshold and above the
+            # old easy-negative cutoff, but independent views reject it.
+            logits[0, 0, 1, 7] = 0.0
+        scores = torch.zeros(1, 2, 1, 9, 9)
+        visibility = torch.ones_like(scores, dtype=torch.bool)
+
+        loss = criterion(
+            logits,
+            target,
+            gaussian_kernel(),
+            projected_view_scores=scores,
+            projected_visibility=visibility,
+        )
+        loss.backward()
+
+        self.assertGreaterEqual(criterion.last_stats['hard_negative_cells'], 1)
+        self.assertGreater(float(logits.grad[0, 0, 1, 7]), 0.0)
+
+    def test_medium_prediction_remains_uncertain_during_warmup(self):
+        criterion = BEVBRLLoss(
+            negative_threshold=0.15,
+            view_negative_threshold=0.3,
+            hard_negative_threshold=0.4,
+            warmup_epochs=1,
+            ramp_epochs=1,
+        )
+        criterion.set_epoch(1)
+        logits = torch.full((1, 1, 9, 9), -4.0, requires_grad=True)
+        target = torch.zeros_like(logits)
+        target[0, 0, 4, 4] = 1
+        with torch.no_grad():
+            logits[0, 0, 1, 7] = 0.0
+        scores = torch.zeros(1, 2, 1, 9, 9)
+        visibility = torch.ones_like(scores, dtype=torch.bool)
+
+        loss = criterion(
+            logits,
+            target,
+            gaussian_kernel(),
+            projected_view_scores=scores,
+            projected_visibility=visibility,
+        )
+        loss.backward()
+
+        self.assertEqual(criterion.last_stats['hard_negative_cells'], 0)
+        self.assertEqual(float(logits.grad[0, 0, 1, 7]), 0.0)
+
 
 class PartialViewBRLLossTest(unittest.TestCase):
     def test_fully_unlabelled_view_is_skipped_after_warmup(self):
@@ -263,6 +326,38 @@ class PartialViewBRLLossTest(unittest.TestCase):
         self.assertEqual(float(loss.detach()), 0.0)
         self.assertEqual(criterion.last_stats['foot_pseudo_cells'], 0)
         self.assertEqual(criterion.last_stats['ramp_factor'], 0.0)
+
+    def test_low_support_foot_prediction_cannot_escape_after_warmup(self):
+        criterion = PartialViewBRLLoss(
+            negative_threshold=0.15,
+            hard_negative_threshold=0.4,
+            support_negative_threshold=0.3,
+            support_positive_threshold=0.65,
+            warmup_epochs=1,
+            ramp_epochs=1,
+        )
+        criterion.set_epoch(2)
+        logits = [torch.full((1, 2, 9, 9), -4.0, requires_grad=True) for _ in range(2)]
+        targets = [torch.zeros(1, 2, 9, 9) for _ in range(2)]
+        supports = [torch.zeros(1, 1, 9, 9) for _ in range(2)]
+        validity = [torch.ones(1, 1, 9, 9, dtype=torch.bool) for _ in range(2)]
+        for view_idx in range(2):
+            targets[view_idx][0, :, 4, 4] = 1
+            with torch.no_grad():
+                logits[view_idx][0, 1, 1, 7] = 0.0
+
+        loss = criterion(
+            logits,
+            targets,
+            gaussian_kernel(channels=2),
+            foot_support_images=supports,
+            foot_support_validity=validity,
+        )
+        loss.backward()
+
+        self.assertGreaterEqual(criterion.last_stats['foot_hard_negative_cells'], 1)
+        for prediction in logits:
+            self.assertGreater(float(prediction.grad[0, 1, 1, 7]), 0.0)
 
 
 class TrainerIntegrationTest(unittest.TestCase):

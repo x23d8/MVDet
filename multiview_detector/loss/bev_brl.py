@@ -80,9 +80,11 @@ class BEVBRLLoss(nn.Module):
             positive_threshold=0.10,
             ignore_threshold=0.01,
             negative_threshold=0.15,
-            view_negative_threshold=0.15,
+            view_negative_threshold=0.30,
+            hard_negative_threshold=0.40,
             bev_threshold=0.60,
-            view_threshold=0.55,
+            mirror_threshold=None,
+            view_threshold=0.65,
             min_views=2,
             consensus_topk=2,
             local_max_kernel=3,
@@ -93,11 +95,11 @@ class BEVBRLLoss(nn.Module):
             positive_weight=1.0,
             negative_weight=0.5,
             brl_weight=0.1,
-            warmup_epochs=3,
-            ramp_epochs=3,
+            warmup_epochs=1,
+            ramp_epochs=2,
             negative_warmup_factor=0.25,
             coverage_threshold=0.5,
-            max_mirror_per_observed=1.5,
+            max_mirror_per_observed=1.0,
             skip_empty_targets=True,
             use_consensus=True,
             mirror_without_consensus=False,
@@ -107,8 +109,16 @@ class BEVBRLLoss(nn.Module):
         super().__init__()
         if not 0 <= ignore_threshold < positive_threshold <= 1:
             raise ValueError('Expected 0 <= ignore_threshold < positive_threshold <= 1')
-        if not 0 <= negative_threshold < bev_threshold <= 1:
-            raise ValueError('Expected 0 <= negative_threshold < bev_threshold <= 1')
+        if mirror_threshold is None:
+            # Keep bev_threshold as a backward-compatible name for the mirror
+            # confidence threshold used by earlier checkpoints/configuration.
+            mirror_threshold = bev_threshold
+        if not 0 <= negative_threshold < hard_negative_threshold <= 1:
+            raise ValueError(
+                'Expected 0 <= negative_threshold < hard_negative_threshold <= 1'
+            )
+        if not 0 < mirror_threshold <= 1:
+            raise ValueError('mirror_threshold must be in (0, 1]')
         if not 0 <= view_negative_threshold < view_threshold <= 1:
             raise ValueError('Expected 0 <= view_negative_threshold < view_threshold <= 1')
         if min_views < 1 or consensus_topk < 1:
@@ -124,7 +134,9 @@ class BEVBRLLoss(nn.Module):
         self.ignore_threshold = ignore_threshold
         self.negative_threshold = negative_threshold
         self.view_negative_threshold = view_negative_threshold
-        self.bev_threshold = bev_threshold
+        self.hard_negative_threshold = hard_negative_threshold
+        self.mirror_threshold = mirror_threshold
+        self.bev_threshold = mirror_threshold
         self.view_threshold = view_threshold
         self.min_views = min_views
         self.consensus_topk = consensus_topk
@@ -257,20 +269,27 @@ class BEVBRLLoss(nn.Module):
             consensus <= self.view_negative_threshold
             if self.use_consensus else torch.ones_like(unlabeled_mask)
         )
-        easy_negative_mask = unlabeled_mask & consensus_low & (
+        conservative_negative_mask = unlabeled_mask & consensus_low & (
             detached_probability <= self.negative_threshold
         )
 
-        # High predictions are only hard negatives once camera heads have had
-        # time to learn.  Before that, low view confidence is not trustworthy.
+        # During warm-up, retain only already-low predictions as conservative
+        # negatives because camera consensus is not calibrated yet. Once the
+        # ramp starts, external low-consensus evidence selects the complete
+        # negative set. Focal weighting, rather than a probability cutoff,
+        # then distinguishes easy from hard predictions and prevents a cell
+        # from escaping supervision by crossing negative_threshold.
+        evidence_negative_mask = (
+            unlabeled_mask & consensus_low
+            if self.use_consensus else conservative_negative_mask
+        )
+        reliable_negative_mask = conservative_negative_mask
         hard_negative_mask = torch.zeros_like(unlabeled_mask)
         if self.use_consensus and self.ramp_factor > 0:
-            hard_negative_mask = (
-                unlabeled_mask
-                & (detached_probability >= self.bev_threshold)
-                & consensus_low
+            reliable_negative_mask = evidence_negative_mask
+            hard_negative_mask = evidence_negative_mask & (
+                detached_probability >= self.hard_negative_threshold
             )
-        reliable_negative_mask = easy_negative_mask | hard_negative_mask
 
         local_maximum = detached_probability == F.max_pool2d(
             detached_probability,
@@ -279,7 +298,7 @@ class BEVBRLLoss(nn.Module):
             padding=self.local_max_kernel // 2,
         )
         mirror_mask = unlabeled_mask & local_maximum & (
-            detached_probability >= self.bev_threshold
+            detached_probability >= self.mirror_threshold
         )
         if self.use_consensus:
             mirror_mask &= consensus >= self.view_threshold
@@ -320,6 +339,8 @@ class BEVBRLLoss(nn.Module):
             'brl_weight': float(self.current_brl_weight),
             'positive_cells': float(positive_mask.sum().detach()),
             'halo_cells': float(halo_mask.sum().detach()),
+            'conservative_negative_cells': float(conservative_negative_mask.sum().detach()),
+            'evidence_negative_cells': float(evidence_negative_mask.sum().detach()),
             'reliable_negative_cells': float(reliable_negative_mask.sum().detach()),
             'hard_negative_cells': float(hard_negative_mask.sum().detach()),
             'mirror_cells': float(mirror_mask.sum().detach()),

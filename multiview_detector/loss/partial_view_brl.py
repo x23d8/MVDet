@@ -25,10 +25,10 @@ class PartialViewBRLLoss(nn.Module):
             positive_threshold=0.10,
             ignore_threshold=0.01,
             negative_threshold=0.15,
-            hard_negative_threshold=0.60,
+            hard_negative_threshold=0.40,
             pseudo_threshold=0.60,
-            support_negative_threshold=0.15,
-            support_positive_threshold=0.55,
+            support_negative_threshold=0.30,
+            support_positive_threshold=0.65,
             min_views=2,
             consensus_topk=2,
             local_max_kernel=3,
@@ -38,13 +38,13 @@ class PartialViewBRLLoss(nn.Module):
             positive_weight=1.0,
             negative_weight=0.25,
             pseudo_weight=0.10,
-            head_weight=0.25,
+            head_weight=0.05,
             foot_weight=1.0,
             head_negative_weight=0.0,
-            warmup_epochs=3,
-            ramp_epochs=3,
+            warmup_epochs=1,
+            ramp_epochs=2,
             coverage_threshold=0.5,
-            max_pseudo_per_observed=1.5,
+            max_pseudo_per_observed=1.0,
             skip_empty_targets=True,
             eps=1e-6,
     ):
@@ -232,6 +232,8 @@ class PartialViewBRLLoss(nn.Module):
             'head_negative_cells': 0.0,
             'head_uncertain_cells': 0.0,
             'foot_positive_cells': 0.0,
+            'foot_conservative_negative_cells': 0.0,
+            'foot_evidence_negative_cells': 0.0,
             'foot_negative_cells': 0.0,
             'foot_hard_negative_cells': 0.0,
             'foot_pseudo_cells': 0.0,
@@ -293,20 +295,24 @@ class PartialViewBRLLoss(nn.Module):
             low_support = support <= self.support_negative_threshold
             high_support = support >= self.support_positive_threshold
 
-            foot_easy_negative = (
+            foot_conservative_negative = (
                 foot_unlabeled
                 & support_valid
                 & low_support
                 & (detached_foot <= self.negative_threshold)
             )
-            foot_hard_negative = torch.zeros_like(foot_easy_negative)
-            foot_pseudo = torch.zeros_like(foot_easy_negative)
+            foot_evidence_negative = foot_unlabeled & support_valid & low_support
+            foot_negative = foot_conservative_negative
+            foot_hard_negative = torch.zeros_like(foot_conservative_negative)
+            foot_pseudo = torch.zeros_like(foot_conservative_negative)
             if self.ramp_factor > 0:
-                foot_hard_negative = (
-                    foot_unlabeled
-                    & support_valid
-                    & low_support
-                    & (detached_foot >= self.hard_negative_threshold)
+                # External BEV/other-view support decides negative
+                # eligibility. The current foot probability only identifies
+                # the hard subset; it no longer lets medium-confidence false
+                # positives escape the negative loss.
+                foot_negative = foot_evidence_negative
+                foot_hard_negative = foot_evidence_negative & (
+                    detached_foot >= self.hard_negative_threshold
                 )
                 local_maximum = detached_foot == F.max_pool2d(
                     detached_foot,
@@ -326,7 +332,6 @@ class PartialViewBRLLoss(nn.Module):
                     detached_foot * support,
                     sparse_target[:, 1:2],
                 )
-            foot_negative = foot_easy_negative | foot_hard_negative
             foot_uncertain = foot_unlabeled & ~foot_negative & ~foot_pseudo
 
             positive_element = (probability - target).square()
@@ -373,6 +378,8 @@ class PartialViewBRLLoss(nn.Module):
                 'head_negative_cells': head_negative.sum(),
                 'head_uncertain_cells': head_uncertain.sum(),
                 'foot_positive_cells': foot_positive.sum(),
+                'foot_conservative_negative_cells': foot_conservative_negative.sum(),
+                'foot_evidence_negative_cells': foot_evidence_negative.sum(),
                 'foot_negative_cells': foot_negative.sum(),
                 'foot_hard_negative_cells': foot_hard_negative.sum(),
                 'foot_pseudo_cells': foot_pseudo.sum(),

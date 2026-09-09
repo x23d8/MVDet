@@ -307,6 +307,7 @@ def main(args):
             ignore_threshold=args.brl_ignore_threshold,
             negative_threshold=args.brl_negative_threshold,
             view_negative_threshold=args.brl_view_negative_threshold,
+            hard_negative_threshold=args.brl_hard_negative_threshold,
             bev_threshold=args.brl_bev_threshold,
             view_threshold=args.brl_view_threshold,
             min_views=args.brl_min_views,
@@ -462,20 +463,25 @@ if __name__ == '__main__':
     parser.add_argument('--brl_positive_threshold', type=float, default=0.10)
     parser.add_argument('--brl_ignore_threshold', type=float, default=0.01)
     parser.add_argument('--brl_negative_threshold', type=float, default=0.15)
-    parser.add_argument('--brl_view_negative_threshold', type=float, default=0.15)
-    parser.add_argument('--brl_bev_threshold', type=float, default=0.60)
-    parser.add_argument('--brl_view_threshold', type=float, default=0.55)
+    parser.add_argument('--brl_view_negative_threshold', type=float, default=0.30,
+                        help='maximum cross-view consensus for reliable BEV negatives')
+    parser.add_argument('--brl_hard_negative_threshold', type=float, default=0.40,
+                        help='BEV confidence that marks a reliable negative as hard')
+    parser.add_argument('--brl_bev_threshold', '--brl_mirror_threshold',
+                        dest='brl_bev_threshold', type=float, default=0.60,
+                        help='BEV confidence required for mirror-positive candidates')
+    parser.add_argument('--brl_view_threshold', type=float, default=0.65)
     parser.add_argument('--brl_min_views', type=int, default=2)
     parser.add_argument('--brl_consensus_topk', type=int, default=2)
     parser.add_argument('--brl_local_max_kernel', type=int, default=3)
     parser.add_argument('--brl_positive_weight', type=float, default=1.0)
     parser.add_argument('--brl_negative_weight', type=float, default=0.50)
     parser.add_argument('--brl_weight', type=float, default=0.10)
-    parser.add_argument('--brl_warmup_epochs', type=int, default=3)
-    parser.add_argument('--brl_ramp_epochs', type=int, default=3)
+    parser.add_argument('--brl_warmup_epochs', type=int, default=1)
+    parser.add_argument('--brl_ramp_epochs', type=int, default=2)
     parser.add_argument('--brl_negative_warmup_factor', type=float, default=0.25)
     parser.add_argument('--brl_coverage_threshold', type=float, default=0.50)
-    parser.add_argument('--brl_max_mirror_per_observed', type=float, default=1.50)
+    parser.add_argument('--brl_max_mirror_per_observed', type=float, default=1.00)
     parser.add_argument('--brl_occupancy_prior', type=float, default=0.01)
     parser.add_argument('--brl_no_consensus', action='store_true')
 
@@ -483,18 +489,18 @@ if __name__ == '__main__':
     parser.add_argument('--view_positive_threshold', type=float, default=0.10)
     parser.add_argument('--view_ignore_threshold', type=float, default=0.01)
     parser.add_argument('--view_negative_threshold', type=float, default=0.15)
-    parser.add_argument('--view_hard_negative_threshold', type=float, default=0.60)
+    parser.add_argument('--view_hard_negative_threshold', type=float, default=0.40)
     parser.add_argument('--view_pseudo_threshold', type=float, default=0.60)
-    parser.add_argument('--view_support_negative_threshold', type=float, default=0.15)
-    parser.add_argument('--view_support_positive_threshold', type=float, default=0.55)
+    parser.add_argument('--view_support_negative_threshold', type=float, default=0.30)
+    parser.add_argument('--view_support_positive_threshold', type=float, default=0.65)
     parser.add_argument('--view_positive_weight', type=float, default=1.0)
     parser.add_argument('--view_negative_weight', type=float, default=0.25)
     parser.add_argument('--view_pseudo_weight', type=float, default=0.10)
-    parser.add_argument('--view_head_weight', type=float, default=0.25)
+    parser.add_argument('--view_head_weight', type=float, default=0.05)
     parser.add_argument('--view_foot_weight', type=float, default=1.0)
     parser.add_argument('--view_head_negative_weight', type=float, default=0.0,
                         help='zero keeps all unlabelled head pixels out of negative supervision')
-    parser.add_argument('--view_max_pseudo_per_observed', type=float, default=1.50)
+    parser.add_argument('--view_max_pseudo_per_observed', type=float, default=1.00)
     parser.add_argument('--view_occupancy_prior', type=float, default=0.01)
     args = parser.parse_args()
 
