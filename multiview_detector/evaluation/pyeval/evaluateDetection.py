@@ -49,19 +49,21 @@ def evaluateDetection_py(res_fpath, gt_fpath, dataset_name):
     #         steps = 1
     #         frames = 399
 
-    gtRaw = np.loadtxt(gt_fpath)
-    detRaw = np.loadtxt(res_fpath)
-    frames = np.unique(detRaw[:, 0]) if detRaw.size else np.zeros(0)
+    # np.loadtxt returns a 1-D array for a file containing exactly one
+    # detection. Keep both inputs two-dimensional so column indexing works
+    # consistently for zero, one, or many rows.
+    gtRaw = np.loadtxt(gt_fpath, ndmin=2)
+    detRaw = np.loadtxt(res_fpath, ndmin=2)
+
+    if detRaw.size == 0:
+        return 0, 0, 0, 0
+    frames = np.unique(detRaw[:, 0])
     frame_ctr = 0
     gt_flag = True
     det_flag = True
 
     gtAllMatrix = 0
     detAllMatrix = 0
-    if detRaw is None or detRaw.shape[0] == 0:
-        MODP, MODA, recall, precision = 0, 0, 0, 0
-        return MODP, MODA, recall, precision
-
     for t in frames:
         idxs = np.where(gtRaw[:, 0] == t)
         idx = idxs[0]
