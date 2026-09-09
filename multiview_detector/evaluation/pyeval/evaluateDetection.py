@@ -1,4 +1,5 @@
 ### python version of matlab evaluation toolkit
+import os
 import numpy as np
 from multiview_detector.evaluation.pyeval.CLEAR_MOD_HUN import CLEAR_MOD_HUN
 
@@ -53,11 +54,16 @@ def evaluateDetection_py(res_fpath, gt_fpath, dataset_name):
     # detection. Keep both inputs two-dimensional so column indexing works
     # consistently for zero, one, or many rows.
     gtRaw = np.loadtxt(gt_fpath, ndmin=2)
+    if os.path.getsize(res_fpath) == 0:
+        return 0, 0, 0, 0
     detRaw = np.loadtxt(res_fpath, ndmin=2)
 
     if detRaw.size == 0:
         return 0, 0, 0, 0
-    frames = np.unique(detRaw[:, 0])
+    # Evaluate every selected ground-truth frame. Iterating only over frames
+    # that contain a detection silently drops false negatives from empty
+    # prediction frames and makes limited validation subsets optimistic.
+    frames = np.unique(gtRaw[:, 0])
     frame_ctr = 0
     gt_flag = True
     det_flag = True

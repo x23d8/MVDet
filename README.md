@@ -188,9 +188,54 @@ view loss and view consensus are disabled.
 
 Useful controls include `--brl_warmup_epochs`, `--brl_ramp_epochs`,
 `--brl_hard_negative_threshold`, `--brl_mirror_threshold`,
+`--brl_hard_negative_weight`, `--view_hard_negative_weight`,
 `--brl_min_views`, `--brl_consensus_topk`, `--view_head_weight`, and
 `--view_foot_weight`. Keep `--view_head_negative_weight 0` unless an independent
 teacher or calibrated head-height model is added.
+
+### Two-epoch local diagnostic
+
+The `local_2ep` profile provides a bounded single-GPU check of the partial loss:
+
+```powershell
+python main.py --run_profile local_2ep -d wildtrack `
+  --data_path D:\path\to\Wildtrack `
+  --dropped_path D:\MVDet\Wildtrack_dropped `
+  --pa 45 --loss auto
+```
+
+The profile uses two epochs, 64 evenly spaced training frames, 20 evenly spaced
+validation frames, one worker, input size `360x640`, image reduction `8`, and
+ground-grid reduction `8`. It uses a learning rate of `0.005` with gradient
+norm clipping at `1.0`, because the logit-space positive objective has a much
+stronger low-confidence gradient than probability MSE. Hard evidence-negative
+peaks receive additional BEV and foot-view weights of `2.0` and `1.0`,
+respectively, so they are not diluted by easy negatives. W&B logging is
+disabled. It skips the redundant
+evaluation before training and after the last epoch. Validation still runs
+after each epoch against complete annotations for exactly the selected
+validation frames. A single validation forward pass is evaluated at confidence
+thresholds from `0.30` to `0.90`, with denser `0.02` steps around `0.40–0.50`;
+this adds only post-processing and does not
+change the model or loss. Override the diagnostic sweep with, for example,
+`--eval_thresholds 0.4 0.6 0.8`. Outputs are written below
+`logs/wildtrack_frame/default/pa45/local_2ep/`.
+After epoch 2, `local_2ep_diagnostic.json` records the complete validation
+history, the fixed-threshold result at `--cls_thres`, and every swept result.
+It prints `PASS` only when the best validation MODA across the predeclared
+thresholds is greater than zero and both the BEV and projected foot-view
+evidence-negative paths were active. The report also marks cases where MODA is
+positive only after threshold calibration while the fixed `0.4` result remains
+zero.
+
+The local profile does not import or require the `wandb` package. Metrics are
+written to `log.txt` and the diagnostic JSON instead.
+
+This profile is a diagnostic and its metrics are not comparable with the full
+benchmark configuration. A useful run should show nonzero
+`bev/evidence_negative_cells` and `bev/hard_negative_cells`, fewer uncertain
+cells, and improving detection precision. Use the full profile for reported
+results.
 
 This should automatically return evaluation results similar to the reported 88.2\% MODA on Wildtrack dataset. 
 

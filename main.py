@@ -1,4 +1,5 @@
 import os
+import json
 
 os.environ['OMP_NUM_THREADS'] = '1'
 import argparse
@@ -29,6 +30,19 @@ from multiview_detector.trainer import PerspectiveTrainer
 
 WANDB_ENTITY = 'GFA26AI02'
 WANDB_PROJECT = 'baseline-expriments'
+
+
+class DisabledExperimentRun:
+    """No-op logger used when experiment tracking is intentionally disabled."""
+
+    def define_metric(self, *args, **kwargs):
+        return None
+
+    def log(self, *args, **kwargs):
+        return None
+
+    def finish(self):
+        return None
 
 
 def configure_classifier_for_logits(classifier, foreground_prior=0.01):
@@ -63,6 +77,10 @@ def configure_classifier_for_logits(classifier, foreground_prior=0.01):
 
 def init_wandb(args, model, train_set, test_set, logdir):
     """Initialize one W&B run for either Wildtrack or MultiviewX."""
+    if args.wandb_mode == 'disabled':
+        print('W&B disabled; metrics remain available in the local training log.')
+        return DisabledExperimentRun()
+
     try:
         import wandb
     except ImportError as exc:
@@ -99,10 +117,10 @@ def init_wandb(args, model, train_set, test_set, logdir):
         'classification_threshold': args.cls_thres,
         'num_workers': args.num_workers,
         'seed': args.seed,
-        'grid_reduce': train_set.grid_reduce,
+        'grid_reduce': args.grid_reduce,
         'image_reduce': train_set.img_reduce,
         'train_ratio': 0.9,
-        'input_size': [720, 1280],
+        'input_size': [args.input_height, args.input_width],
         'num_cameras': train_set.num_cam,
         'train_samples': len(train_set),
         'test_samples': len(test_set),
@@ -174,7 +192,149 @@ def log_phase(run, phase, epoch, metrics, optimizer=None):
     print(f'[{phase}] Epoch: {epoch}, {metric_text}, {gpu_text}')
 
 
+def apply_run_profile(args):
+    """Apply deterministic presets intended for a specific execution budget."""
+    if args.run_profile == 'full':
+        return
+    if args.run_profile != 'local_2ep':
+        raise ValueError(f'Unknown run profile: {args.run_profile}')
+    if args.pa <= 0:
+        raise ValueError('local_2ep is a partial-annotation diagnostic; pass --pa 20, 45, or 60')
+    if args.variant != 'default':
+        raise ValueError('local_2ep currently supports --variant default only')
+
+    args.epochs = 2
+    args.batch_size = 1
+    args.num_workers = 0
+    args.wandb_mode = 'disabled'
+    args.device_mode = 'single'
+    args.input_height = 360
+    args.input_width = 640
+    args.grid_reduce = 8
+    args.img_reduce = 8
+    args.max_train_frames = args.max_train_frames or 64
+    args.max_test_frames = args.max_test_frames or 20
+    args.lr = 0.005
+    args.grad_clip_norm = 1.0
+    args.skip_initial_eval = True
+    # A fresh run already validates after epoch two.  Resume mode performs one
+    # evaluation so a saved checkpoint can be recalibrated without retraining.
+    args.skip_final_eval = args.resume is None
+    # Activate the corrected evidence-negative path within two epochs while
+    # retaining a gradual first-epoch transition.
+    args.brl_warmup_epochs = 0
+    args.brl_ramp_epochs = 2
+    args.brl_hard_negative_weight = 2.0
+    args.view_hard_negative_weight = 1.0
+    if args.eval_thresholds is None:
+        args.eval_thresholds = [
+            0.30, 0.35, 0.40, 0.42, 0.44, 0.46, 0.48,
+            0.50, 0.60, 0.70, 0.80, 0.90,
+        ]
+    print(
+        'Applied local_2ep profile: 2 epochs, single GPU, '
+        f'{args.max_train_frames} train frames, {args.max_test_frames} validation frames, '
+        f'input {args.input_height}x{args.input_width}, '
+        f'grid_reduce={args.grid_reduce}, img_reduce={args.img_reduce}, '
+        f'lr={args.lr}, grad_clip_norm={args.grad_clip_norm}, '
+        f'eval_thresholds={args.eval_thresholds}'
+    )
+
+
+def build_local_diagnostic(validation_history, fixed_threshold=0.4):
+    """Summarize the predeclared validation-threshold sweep without hiding 0.4."""
+    if not validation_history:
+        raise ValueError('validation history cannot be empty')
+    best_result = max(
+        validation_history,
+        key=lambda result: result['selected_moda_percent'],
+    )
+    max_bev_evidence_negatives = max(
+        float(result.get('bev/evidence_negative_cells', 0.0))
+        for result in validation_history
+    )
+    max_foot_evidence_negatives = max(
+        float(result.get('view/foot_evidence_negative_cells', 0.0))
+        for result in validation_history
+    )
+    max_bev_hard_negatives = max(
+        float(result.get('bev/hard_negative_cells', 0.0))
+        for result in validation_history
+    )
+    max_foot_hard_negatives = max(
+        float(result.get('view/foot_hard_negative_cells', 0.0))
+        for result in validation_history
+    )
+    loss_path_active = (
+        max_bev_evidence_negatives > 0 and max_foot_evidence_negatives > 0
+    )
+    fixed_threshold_best_moda = float(max(
+        result['moda_percent'] for result in validation_history
+    ))
+    positive_selected_moda = best_result['selected_moda_percent'] > 0
+    return {
+        'status': 'pass' if positive_selected_moda and loss_path_active else 'fail',
+        'criterion': (
+            'best validation MODA across configured thresholds must be greater than zero, '
+            'and both BEV and foot-view evidence-negative loss paths must be active'
+        ),
+        'loss_path_active': loss_path_active,
+        'max_bev_evidence_negative_cells': max_bev_evidence_negatives,
+        'max_foot_evidence_negative_cells': max_foot_evidence_negatives,
+        'hard_negative_path_active': (
+            max_bev_hard_negatives > 0 and max_foot_hard_negatives > 0
+        ),
+        'max_bev_hard_negative_cells': max_bev_hard_negatives,
+        'max_foot_hard_negative_cells': max_foot_hard_negatives,
+        'best_epoch': int(best_result['epoch']),
+        'best_threshold': float(best_result['selected_cls_threshold']),
+        'best_moda_percent': float(best_result['selected_moda_percent']),
+        'best_detection_precision_percent': float(
+            best_result['selected_detection_precision_percent']
+        ),
+        'best_detection_recall_percent': float(
+            best_result['selected_detection_recall_percent']
+        ),
+        'fixed_threshold': float(fixed_threshold),
+        'fixed_threshold_best_moda_percent': fixed_threshold_best_moda,
+        'threshold_calibration_recovered_positive_moda': (
+            fixed_threshold_best_moda <= 0 and positive_selected_moda
+        ),
+        'history': validation_history,
+    }
+
+
+def save_local_diagnostic(logdir, validation_history, fixed_threshold=0.4):
+    diagnostic = build_local_diagnostic(validation_history, fixed_threshold)
+    diagnostic_path = os.path.join(logdir, 'local_2ep_diagnostic.json')
+    with open(diagnostic_path, 'w', encoding='utf-8') as diagnostic_file:
+        json.dump(diagnostic, diagnostic_file, indent=2)
+    print(
+        '[local_2ep] {status}: best epoch {epoch}, threshold {threshold:.2f}, '
+        'MODA {moda:.2f}%, precision {precision:.2f}%, recall {recall:.2f}%. '
+        'Report: {path}'.format(
+            status=diagnostic['status'].upper(),
+            epoch=diagnostic['best_epoch'],
+            threshold=diagnostic['best_threshold'],
+            moda=diagnostic['best_moda_percent'],
+            precision=diagnostic['best_detection_precision_percent'],
+            recall=diagnostic['best_detection_recall_percent'],
+            path=diagnostic_path,
+        )
+    )
+    return diagnostic
+
+
 def main(args):
+    apply_run_profile(args)
+    if args.input_height < 1 or args.input_width < 1:
+        raise ValueError('input dimensions must be positive')
+    if args.grid_reduce < 1 or args.img_reduce < 1:
+        raise ValueError('grid_reduce and img_reduce must be positive')
+    if args.lr <= 0:
+        raise ValueError('learning rate must be positive')
+    if args.grad_clip_norm < 0:
+        raise ValueError('grad_clip_norm cannot be negative')
     # seed
     if args.seed is not None:
         np.random.seed(args.seed)
@@ -188,7 +348,11 @@ def main(args):
     # dataset
     normalize = T.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
     denormalize = img_color_denormalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
-    train_trans = T.Compose([T.Resize([720, 1280]), T.ToTensor(), normalize, ])
+    train_trans = T.Compose([
+        T.Resize([args.input_height, args.input_width]),
+        T.ToTensor(),
+        normalize,
+    ])
     if args.data_path:
         requested_data_path = args.data_path
         args.dataset, data_path = detect_dataset_root(
@@ -234,12 +398,21 @@ def main(args):
         base,
         train=True,
         transform=train_trans,
-        grid_reduce=4,
+        grid_reduce=args.grid_reduce,
+        img_reduce=args.img_reduce,
         annotation_dir=train_annotation_dir,
+        max_frames=args.max_train_frames,
     )
     # Validation/test labels and evaluation GT must remain complete for every
     # partial-annotation setting, so no alternate annotation directory is used.
-    test_set = frameDataset(base, train=False, transform=train_trans, grid_reduce=4)
+    test_set = frameDataset(
+        base,
+        train=False,
+        transform=train_trans,
+        grid_reduce=args.grid_reduce,
+        img_reduce=args.img_reduce,
+        max_frames=args.max_test_frames,
+    )
 
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
                                                num_workers=args.num_workers, pin_memory=True)
@@ -248,7 +421,7 @@ def main(args):
 
     # model
     if args.variant == 'default':
-        model = PerspTransDetector(train_set, args.arch)
+        model = PerspTransDetector(train_set, args.arch, device_mode=args.device_mode)
     elif args.variant == 'img_proj':
         model = ImageProjVariant(train_set, args.arch)
     elif args.variant == 'res_proj':
@@ -257,6 +430,11 @@ def main(args):
         model = NoJointConvVariant(train_set, args.arch)
     else:
         raise Exception('no support for this variant')
+    loss_device = getattr(
+        model,
+        'fusion_device',
+        torch.device('cuda:0' if torch.cuda.is_available() else 'cpu'),
+    )
 
     # loss
     resolved_loss = args.loss
@@ -290,6 +468,7 @@ def main(args):
                 local_max_kernel=args.brl_local_max_kernel,
                 positive_weight=args.view_positive_weight,
                 negative_weight=args.view_negative_weight,
+                hard_negative_weight=args.view_hard_negative_weight,
                 pseudo_weight=args.view_pseudo_weight,
                 head_weight=args.view_head_weight,
                 foot_weight=args.view_foot_weight,
@@ -298,7 +477,7 @@ def main(args):
                 ramp_epochs=args.brl_ramp_epochs,
                 coverage_threshold=args.brl_coverage_threshold,
                 max_pseudo_per_observed=args.view_max_pseudo_per_observed,
-            ).cuda()
+            ).to(loss_device)
             if args.variant == 'res_proj':
                 model.view_outputs_logits = True
 
@@ -315,6 +494,7 @@ def main(args):
             local_max_kernel=args.brl_local_max_kernel,
             positive_weight=args.brl_positive_weight,
             negative_weight=args.brl_negative_weight,
+            hard_negative_weight=args.brl_hard_negative_weight,
             brl_weight=args.brl_weight,
             warmup_epochs=args.brl_warmup_epochs,
             ramp_epochs=args.brl_ramp_epochs,
@@ -323,9 +503,9 @@ def main(args):
             max_mirror_per_observed=args.brl_max_mirror_per_observed,
             use_consensus=use_consensus,
             view_outputs_logits=True,
-        ).cuda()
+        ).to(loss_device)
     else:
-        criterion = GaussianMSE().cuda()
+        criterion = GaussianMSE().to(loss_device)
         view_criterion = criterion if args.variant != 'img_proj' else None
 
     # Classifier layers may have been replaced to add logit biases.  Create the
@@ -337,6 +517,8 @@ def main(args):
     # local and W&B logging
     variant_logdir = os.path.join('logs', f'{args.dataset}_frame', args.variant)
     pa_logdir = os.path.join(variant_logdir, f'pa{args.pa}')
+    if args.run_profile != 'full':
+        pa_logdir = os.path.join(pa_logdir, args.run_profile)
     if args.resume is None:
         logdir = os.path.join(pa_logdir, datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S'))
     else:
@@ -366,6 +548,7 @@ def main(args):
     test_loss_s = []
     test_prec_s = []
     test_moda_s = []
+    validation_history = []
 
     trainer = PerspectiveTrainer(
         model,
@@ -380,22 +563,41 @@ def main(args):
     # learn
     try:
         if args.resume is None:
-            print('Testing before training...')
-            reset_peak_gpu_memory()
-            trainer.test(test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, True)
-            log_phase(wandb_run, 'validation', 0, trainer.last_test_metrics)
+            if not args.skip_initial_eval:
+                print('Testing before training...')
+                reset_peak_gpu_memory()
+                trainer.test(
+                    test_loader,
+                    os.path.join(logdir, 'test.txt'),
+                    test_set.gt_fpath,
+                    args.visualize,
+                )
+                log_phase(wandb_run, 'validation', 0, trainer.last_test_metrics)
 
             for epoch in tqdm.tqdm(range(1, args.epochs + 1)):
                 print('Training...')
                 reset_peak_gpu_memory()
-                train_loss, train_prec = trainer.train(epoch, train_loader, optimizer, args.log_interval, scheduler)
+                train_loss, train_prec = trainer.train(
+                    epoch,
+                    train_loader,
+                    optimizer,
+                    args.log_interval,
+                    scheduler,
+                    args.grad_clip_norm,
+                )
                 log_phase(wandb_run, 'train', epoch, trainer.last_train_metrics, optimizer)
 
                 print('Testing...')
                 reset_peak_gpu_memory()
                 test_loss, test_prec, moda = trainer.test(test_loader, os.path.join(logdir, 'test.txt'),
-                                                          train_set.gt_fpath, True)
+                                                          test_set.gt_fpath, args.visualize,
+                                                          args.eval_thresholds)
                 log_phase(wandb_run, 'validation', epoch, trainer.last_test_metrics)
+                validation_history.append({
+                    'epoch': epoch,
+                    **trainer.last_test_metrics,
+                    'threshold_sweep': trainer.last_detection_threshold_metrics,
+                })
 
                 x_epoch.append(epoch)
                 train_loss_s.append(train_loss)
@@ -407,19 +609,39 @@ def main(args):
                            test_loss_s, test_prec_s, test_moda_s)
                 # save
                 torch.save(model.state_dict(), os.path.join(logdir, 'MultiviewDetector.pth'))
+
+            if args.run_profile == 'local_2ep':
+                save_local_diagnostic(logdir, validation_history, args.cls_thres)
         else:
             resume_fname = os.path.join(logdir, 'MultiviewDetector.pth')
             state_dict = torch.load(resume_fname)
             incompatible = model.load_state_dict(state_dict, strict=resolved_loss != 'bev_brl')
             if resolved_loss == 'bev_brl' and (incompatible.missing_keys or incompatible.unexpected_keys):
                 print('Loaded checkpoint with non-strict BRL compatibility:', incompatible)
+            for resumed_criterion in (criterion, view_criterion):
+                if hasattr(resumed_criterion, 'set_epoch'):
+                    resumed_criterion.set_epoch(args.epochs)
             model.eval()
 
-        print('Test loaded model...')
-        reset_peak_gpu_memory()
-        trainer.test(test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, True)
-        final_epoch = args.epochs if args.resume is None else 0
-        log_phase(wandb_run, 'final_test', final_epoch, trainer.last_test_metrics)
+        if not args.skip_final_eval:
+            print('Test loaded model...')
+            reset_peak_gpu_memory()
+            trainer.test(
+                test_loader,
+                os.path.join(logdir, 'test.txt'),
+                test_set.gt_fpath,
+                args.visualize,
+                args.eval_thresholds,
+            )
+            final_epoch = args.epochs
+            log_phase(wandb_run, 'final_test', final_epoch, trainer.last_test_metrics)
+            if args.run_profile == 'local_2ep' and args.resume is not None:
+                resumed_history = [{
+                    'epoch': final_epoch,
+                    **trainer.last_test_metrics,
+                    'threshold_sweep': trainer.last_detection_threshold_metrics,
+                }]
+                save_local_diagnostic(logdir, resumed_history, args.cls_thres)
     finally:
         wandb_run.finish()
 
@@ -429,6 +651,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Multiview detector')
     parser.add_argument('--reID', action='store_true')
     parser.add_argument('--cls_thres', type=float, default=0.4)
+    parser.add_argument('--eval_thresholds', type=float, nargs='+', default=None,
+                        help='optional confidence thresholds evaluated from one validation forward pass')
     parser.add_argument('--alpha', type=float, default=1.0, help='ratio for per view loss')
     parser.add_argument('--loss', type=str, default='auto',
                         choices=['auto', 'gaussian_mse', 'bev_brl'],
@@ -436,6 +660,22 @@ if __name__ == '__main__':
     parser.add_argument('--variant', type=str, default='default',
                         choices=['default', 'img_proj', 'res_proj', 'no_joint_conv'])
     parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18'])
+    parser.add_argument('--run_profile', type=str, default='full', choices=['full', 'local_2ep'],
+                        help='local_2ep applies a bounded two-epoch single-GPU diagnostic preset')
+    parser.add_argument('--device_mode', type=str, default='auto',
+                        choices=['auto', 'single', 'split', 'cpu'],
+                        help='device placement for the default MVDet variant')
+    parser.add_argument('--input_height', type=int, default=720)
+    parser.add_argument('--input_width', type=int, default=1280)
+    parser.add_argument('--grid_reduce', type=int, default=4)
+    parser.add_argument('--img_reduce', type=int, default=4)
+    parser.add_argument('--max_train_frames', type=int, default=None,
+                        help='deterministically limit training frames for diagnostic runs')
+    parser.add_argument('--max_test_frames', type=int, default=None,
+                        help='deterministically limit validation frames for diagnostic runs')
+    parser.add_argument('--skip_initial_eval', action='store_true')
+    parser.add_argument('--skip_final_eval', action='store_true',
+                        help='skip the duplicate final evaluation after the last training epoch')
     parser.add_argument('-d', '--dataset', type=str, default=None, choices=['wildtrack', 'multiviewx'],
                         help='dataset type; searches the default path and Kaggle inputs when --data_path is omitted')
     parser.add_argument('--data_path', type=str, default=None,
@@ -449,6 +689,8 @@ if __name__ == '__main__':
                         help='input batch size for training (default: 1)')
     parser.add_argument('--epochs', type=int, default=10, metavar='N', help='number of epochs to train (default: 10)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR', help='learning rate (default: 0.1)')
+    parser.add_argument('--grad_clip_norm', type=float, default=0.0,
+                        help='maximum gradient norm; zero disables clipping')
     parser.add_argument('--weight_decay', type=float, default=5e-4)
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M', help='SGD momentum (default: 0.5)')
     parser.add_argument('--log_interval', type=int, default=10, metavar='N',
@@ -476,6 +718,8 @@ if __name__ == '__main__':
     parser.add_argument('--brl_local_max_kernel', type=int, default=3)
     parser.add_argument('--brl_positive_weight', type=float, default=1.0)
     parser.add_argument('--brl_negative_weight', type=float, default=0.50)
+    parser.add_argument('--brl_hard_negative_weight', type=float, default=1.00,
+                        help='extra focal-loss weight for high-confidence reliable BEV negatives')
     parser.add_argument('--brl_weight', type=float, default=0.10)
     parser.add_argument('--brl_warmup_epochs', type=int, default=1)
     parser.add_argument('--brl_ramp_epochs', type=int, default=2)
@@ -495,6 +739,8 @@ if __name__ == '__main__':
     parser.add_argument('--view_support_positive_threshold', type=float, default=0.65)
     parser.add_argument('--view_positive_weight', type=float, default=1.0)
     parser.add_argument('--view_negative_weight', type=float, default=0.25)
+    parser.add_argument('--view_hard_negative_weight', type=float, default=0.50,
+                        help='extra focal-loss weight for high-confidence reliable foot negatives')
     parser.add_argument('--view_pseudo_weight', type=float, default=0.10)
     parser.add_argument('--view_head_weight', type=float, default=0.05)
     parser.add_argument('--view_foot_weight', type=float, default=1.0)

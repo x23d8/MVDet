@@ -35,6 +35,7 @@ class PerspectiveTrainer(BaseTrainer):
         self.alpha = alpha
         self.last_train_metrics = {}
         self.last_test_metrics = {}
+        self.last_detection_threshold_metrics = {}
 
     def _map_probability(self, map_result):
         if getattr(self.criterion, 'outputs_logits', False):
@@ -102,7 +103,8 @@ class PerspectiveTrainer(BaseTrainer):
             for name, value in getattr(criterion, 'last_stats', {}).items():
                 meters.setdefault(f'{prefix}/{name}', AverageMeter()).update(value)
 
-    def train(self, epoch, data_loader, optimizer, log_interval=100, cyclic_scheduler=None):
+    def train(self, epoch, data_loader, optimizer, log_interval=100, cyclic_scheduler=None,
+              grad_clip_norm=0.0):
         self.model.train()
         for criterion in (self.criterion, self.view_criterion):
             if hasattr(criterion, 'set_epoch'):
@@ -122,7 +124,14 @@ class PerspectiveTrainer(BaseTrainer):
             loss, _, _ = self._compute_loss(
                 map_res, imgs_res, map_gt, imgs_gt, data_loader.dataset
             )
+            if not torch.isfinite(loss):
+                raise FloatingPointError(
+                    f'Non-finite loss at epoch {epoch}, batch {batch_idx + 1}; '
+                    'reduce the learning rate or inspect the loss masks'
+                )
             loss.backward()
+            if grad_clip_norm > 0:
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), grad_clip_norm)
             optimizer.step()
             losses += loss.item()
             self._update_criterion_metrics(criterion_metrics)
@@ -171,12 +180,54 @@ class PerspectiveTrainer(BaseTrainer):
 
         return losses / len(data_loader), precision_s.avg * 100
 
-    def test(self, data_loader, res_fpath=None, gt_fpath=None, visualize=False):
+    @staticmethod
+    def _threshold_result_path(res_fpath, threshold):
+        stem, extension = os.path.splitext(res_fpath)
+        threshold_label = f'{threshold:.2f}'.replace('.', 'p')
+        return f'{stem}_threshold_{threshold_label}{extension}'
+
+    @staticmethod
+    def _evaluate_candidates(all_candidates, threshold, res_fpath, gt_fpath, dataset_name):
+        selected = all_candidates[all_candidates[:, 3] > threshold]
+        res_list = []
+        for frame in np.unique(selected[:, 0]):
+            res = selected[selected[:, 0] == frame, :]
+            positions, scores = res[:, 1:3], res[:, 3]
+            ids, count = nms(positions, scores, 20, np.inf)
+            res_list.append(torch.cat([
+                torch.ones([count, 1]) * frame,
+                positions[ids[:count], :],
+            ], dim=1))
+        detections = torch.cat(res_list, dim=0).numpy() if res_list else np.empty([0, 3])
+        np.savetxt(res_fpath, detections, '%d')
+        recall, precision, moda, modp = evaluate(
+            os.path.abspath(res_fpath),
+            os.path.abspath(gt_fpath),
+            dataset_name,
+        )
+        return {
+            'threshold': float(threshold),
+            'moda_percent': float(moda),
+            'modp_percent': float(modp),
+            'detection_precision_percent': float(precision),
+            'detection_recall_percent': float(recall),
+            'num_detections': int(detections.shape[0]),
+        }
+
+    def test(self, data_loader, res_fpath=None, gt_fpath=None, visualize=False,
+             detection_thresholds=None):
         self.model.eval()
         losses = 0
         precision_s, recall_s = AverageMeter(), AverageMeter()
         criterion_metrics = {}
         all_res_list = []
+        thresholds = [float(self.cls_thres)]
+        if detection_thresholds is not None:
+            thresholds.extend(float(threshold) for threshold in detection_thresholds)
+        thresholds = sorted(set(thresholds))
+        if any(not 0 < threshold < 1 for threshold in thresholds):
+            raise ValueError('detection thresholds must be between zero and one')
+        candidate_threshold = min(thresholds)
         t0 = time.time()
         if res_fpath is not None:
             assert gt_fpath is not None
@@ -186,8 +237,8 @@ class PerspectiveTrainer(BaseTrainer):
                 map_probability = self._map_probability(map_res)
             if res_fpath is not None:
                 map_grid_res = map_probability.detach().cpu().squeeze()
-                v_s = map_grid_res[map_grid_res > self.cls_thres].unsqueeze(1)
-                grid_ij = (map_grid_res > self.cls_thres).nonzero()
+                v_s = map_grid_res[map_grid_res > candidate_threshold].unsqueeze(1)
+                grid_ij = (map_grid_res > candidate_threshold).nonzero()
                 if data_loader.dataset.base.indexing == 'xy':
                     grid_xy = grid_ij[:, [1, 0]]
                 else:
@@ -237,27 +288,49 @@ class PerspectiveTrainer(BaseTrainer):
         modp = 0
         detection_precision = 0
         detection_recall = 0
+        selected_metrics = None
+        self.last_detection_threshold_metrics = {}
         if res_fpath is not None:
             all_res_list = torch.cat(all_res_list, dim=0)
             np.savetxt(os.path.abspath(os.path.dirname(res_fpath)) + '/all_res.txt', all_res_list.numpy(), '%.8f')
-            res_list = []
-            for frame in np.unique(all_res_list[:, 0]):
-                res = all_res_list[all_res_list[:, 0] == frame, :]
-                positions, scores = res[:, 1:3], res[:, 3]
-                ids, count = nms(positions, scores, 20, np.inf)
-                res_list.append(torch.cat([torch.ones([count, 1]) * frame, positions[ids[:count], :]], dim=1))
-            res_list = torch.cat(res_list, dim=0).numpy() if res_list else np.empty([0, 3])
-            np.savetxt(res_fpath, res_list, '%d')
+            for threshold in thresholds:
+                threshold_path = (
+                    res_fpath if threshold == self.cls_thres
+                    else self._threshold_result_path(res_fpath, threshold)
+                )
+                metrics = self._evaluate_candidates(
+                    all_res_list,
+                    threshold,
+                    threshold_path,
+                    gt_fpath,
+                    data_loader.dataset.base.__name__,
+                )
+                self.last_detection_threshold_metrics[f'{threshold:.2f}'] = metrics
+                print(
+                    'threshold: {:.2f}, moda: {:.1f}%, modp: {:.1f}%, '
+                    'precision: {:.1f}%, recall: {:.1f}%, detections: {}'.format(
+                        threshold,
+                        metrics['moda_percent'],
+                        metrics['modp_percent'],
+                        metrics['detection_precision_percent'],
+                        metrics['detection_recall_percent'],
+                        metrics['num_detections'],
+                    )
+                )
 
-            detection_recall, detection_precision, moda, modp = evaluate(
-                os.path.abspath(res_fpath), os.path.abspath(gt_fpath), data_loader.dataset.base.__name__)
-
-            # If you want to use the unofiicial python evaluation tool for convenient purposes.
-            # recall, precision, modp, moda = python_eval(os.path.abspath(res_fpath), os.path.abspath(gt_fpath),
-            #                                             data_loader.dataset.base.__name__)
-
-            print('moda: {:.1f}%, modp: {:.1f}%, precision: {:.1f}%, recall: {:.1f}%'.
-                  format(moda, modp, detection_precision, detection_recall))
+            primary_metrics = self.last_detection_threshold_metrics[f'{self.cls_thres:.2f}']
+            moda = primary_metrics['moda_percent']
+            modp = primary_metrics['modp_percent']
+            detection_precision = primary_metrics['detection_precision_percent']
+            detection_recall = primary_metrics['detection_recall_percent']
+            selected_metrics = max(
+                self.last_detection_threshold_metrics.values(),
+                key=lambda metrics: (
+                    metrics['moda_percent'],
+                    metrics['detection_precision_percent'],
+                    -metrics['threshold'],
+                ),
+            )
 
         print('Test, Loss: {:.6f}, Precision: {:.1f}%, Recall: {:.1f}, \tTime: {:.3f}'.format(
             losses / len(data_loader), precision_s.avg * 100, recall_s.avg * 100, t_epoch))
@@ -270,11 +343,29 @@ class PerspectiveTrainer(BaseTrainer):
             'modp_percent': modp,
             'detection_precision_percent': detection_precision,
             'detection_recall_percent': detection_recall,
+            'selected_cls_threshold': (
+                selected_metrics['threshold'] if selected_metrics is not None else self.cls_thres
+            ),
+            'selected_moda_percent': (
+                selected_metrics['moda_percent'] if selected_metrics is not None else moda
+            ),
+            'selected_modp_percent': (
+                selected_metrics['modp_percent'] if selected_metrics is not None else modp
+            ),
+            'selected_detection_precision_percent': (
+                selected_metrics['detection_precision_percent']
+                if selected_metrics is not None else detection_precision
+            ),
+            'selected_detection_recall_percent': (
+                selected_metrics['detection_recall_percent']
+                if selected_metrics is not None else detection_recall
+            ),
             'duration_seconds': t_epoch,
         }
         self.last_test_metrics.update({name: meter.avg for name, meter in criterion_metrics.items()})
 
-        return losses / len(data_loader), precision_s.avg * 100, moda
+        reported_moda = self.last_test_metrics['selected_moda_percent']
+        return losses / len(data_loader), precision_s.avg * 100, reported_moda
 
 
 class BBOXTrainer(BaseTrainer):

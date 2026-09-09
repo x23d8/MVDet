@@ -49,6 +49,38 @@ class GaussianTargetTest(unittest.TestCase):
 
 
 class BEVBRLLossTest(unittest.TestCase):
+    def test_positive_bce_does_not_stall_at_one_percent_prior(self):
+        criterion = BEVBRLLoss(
+            positive_weight=1.0,
+            negative_weight=0.0,
+            brl_weight=0.0,
+            warmup_epochs=0,
+            ramp_epochs=0,
+        )
+        criterion.set_epoch(1)
+        prior = 0.01
+        prior_logit = torch.logit(torch.tensor(prior))
+        logits = torch.full((1, 1, 9, 9), prior_logit.item(), requires_grad=True)
+        sparse_target = torch.zeros_like(logits)
+        sparse_target[0, 0, 4, 4] = 1
+        scores = torch.zeros(1, 2, 1, 9, 9)
+        visibility = torch.ones_like(scores, dtype=torch.bool)
+
+        loss = criterion(
+            logits,
+            sparse_target,
+            gaussian_kernel(),
+            projected_view_scores=scores,
+            projected_visibility=visibility,
+        )
+        loss.backward()
+
+        positive_count = criterion.last_stats['positive_cells']
+        bce_gradient = abs(float(logits.grad[0, 0, 4, 4]))
+        mse_gradient = 2 * (1 - prior) * prior * (1 - prior) / positive_count
+        self.assertGreater(bce_gradient, 40 * mse_gradient)
+        self.assertLess(float(logits.grad[0, 0, 4, 4]), 0.0)
+
     def test_fully_unlabelled_sample_is_skipped_not_background(self):
         criterion = BEVBRLLoss(warmup_epochs=0, ramp_epochs=0)
         criterion.set_epoch(5)
@@ -168,6 +200,8 @@ class BEVBRLLossTest(unittest.TestCase):
         loss.backward()
 
         self.assertGreaterEqual(criterion.last_stats['hard_negative_cells'], 1)
+        self.assertGreater(criterion.last_stats['loss_hard_negative'], 0)
+        self.assertEqual(criterion.last_stats['hard_negative_weight'], 1.0)
         self.assertGreater(float(logits.grad[0, 0, 1, 7]), 0.0)
 
     def test_medium_prediction_remains_uncertain_during_warmup(self):
@@ -201,6 +235,38 @@ class BEVBRLLossTest(unittest.TestCase):
 
 
 class PartialViewBRLLossTest(unittest.TestCase):
+    def test_head_and_foot_positive_gradients_survive_low_prior(self):
+        criterion = PartialViewBRLLoss(
+            positive_weight=1.0,
+            negative_weight=0.0,
+            pseudo_weight=0.0,
+            head_weight=1.0,
+            foot_weight=1.0,
+            warmup_epochs=0,
+            ramp_epochs=0,
+        )
+        criterion.set_epoch(1)
+        prior_logit = torch.logit(torch.tensor(0.01)).item()
+        logits = [torch.full((1, 2, 9, 9), prior_logit, requires_grad=True) for _ in range(2)]
+        targets = [torch.zeros(1, 2, 9, 9) for _ in range(2)]
+        supports = [torch.zeros(1, 1, 9, 9) for _ in range(2)]
+        validity = [torch.ones(1, 1, 9, 9, dtype=torch.bool) for _ in range(2)]
+        for target in targets:
+            target[0, :, 4, 4] = 1
+
+        loss = criterion(
+            logits,
+            targets,
+            gaussian_kernel(channels=2),
+            foot_support_images=supports,
+            foot_support_validity=validity,
+        )
+        loss.backward()
+
+        for prediction in logits:
+            self.assertLess(float(prediction.grad[0, 0, 4, 4]), 0.0)
+            self.assertLess(float(prediction.grad[0, 1, 4, 4]), 0.0)
+
     def test_fully_unlabelled_view_is_skipped_after_warmup(self):
         criterion = PartialViewBRLLoss(warmup_epochs=0, ramp_epochs=0)
         criterion.set_epoch(5)
@@ -356,6 +422,7 @@ class PartialViewBRLLossTest(unittest.TestCase):
         loss.backward()
 
         self.assertGreaterEqual(criterion.last_stats['foot_hard_negative_cells'], 1)
+        self.assertGreater(criterion.last_stats['loss_foot_hard_negative'], 0)
         for prediction in logits:
             self.assertGreater(float(prediction.grad[0, 1, 1, 7]), 0.0)
 

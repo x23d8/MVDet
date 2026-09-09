@@ -37,6 +37,7 @@ class PartialViewBRLLoss(nn.Module):
             gamma_pseudo=2.0,
             positive_weight=1.0,
             negative_weight=0.25,
+            hard_negative_weight=0.5,
             pseudo_weight=0.10,
             head_weight=0.05,
             foot_weight=1.0,
@@ -79,6 +80,7 @@ class PartialViewBRLLoss(nn.Module):
         self.gamma_pseudo = gamma_pseudo
         self.positive_weight = positive_weight
         self.negative_weight = negative_weight
+        self.hard_negative_weight = hard_negative_weight
         self.pseudo_weight = pseudo_weight
         self.head_weight = head_weight
         self.foot_weight = foot_weight
@@ -227,6 +229,7 @@ class PartialViewBRLLoss(nn.Module):
             'loss_head_negative': 0.0,
             'loss_foot_positive': 0.0,
             'loss_foot_negative': 0.0,
+            'loss_foot_hard_negative': 0.0,
             'loss_foot_pseudo': 0.0,
             'head_positive_cells': 0.0,
             'head_negative_cells': 0.0,
@@ -334,7 +337,14 @@ class PartialViewBRLLoss(nn.Module):
                 )
             foot_uncertain = foot_unlabeled & ~foot_negative & ~foot_pseudo
 
-            positive_element = (probability - target).square()
+            # Use the same non-saturating positive objective as the BEV head.
+            # This is especially important for the foot channel because its
+            # projected probabilities provide the independent BEV evidence.
+            positive_element = F.binary_cross_entropy_with_logits(
+                prediction,
+                target,
+                reduction='none',
+            )
             head_negative_element = -(
                 (1.0 - self.focal_alpha)
                 * head_probability.pow(self.gamma_negative)
@@ -355,6 +365,10 @@ class PartialViewBRLLoss(nn.Module):
             loss_foot_positive = masked_mean(positive_element[:, 1:2], foot_positive)
             loss_head_negative = masked_mean(head_negative_element, head_negative)
             loss_foot_negative = masked_mean(foot_negative_element, foot_negative)
+            loss_foot_hard_negative = masked_mean(
+                foot_negative_element,
+                foot_hard_negative,
+            )
             loss_foot_pseudo = masked_mean(foot_pseudo_element, foot_pseudo)
 
             head_loss = (
@@ -364,6 +378,7 @@ class PartialViewBRLLoss(nn.Module):
             foot_loss = (
                 self.positive_weight * loss_foot_positive
                 + self.negative_weight * self.ramp_factor * loss_foot_negative
+                + self.hard_negative_weight * self.ramp_factor * loss_foot_hard_negative
                 + self.pseudo_weight * self.ramp_factor * loss_foot_pseudo
             )
             total_loss = total_loss + self.head_weight * head_loss + self.foot_weight * foot_loss
@@ -373,6 +388,7 @@ class PartialViewBRLLoss(nn.Module):
                 'loss_head_negative': loss_head_negative,
                 'loss_foot_positive': loss_foot_positive,
                 'loss_foot_negative': loss_foot_negative,
+                'loss_foot_hard_negative': loss_foot_hard_negative,
                 'loss_foot_pseudo': loss_foot_pseudo,
                 'head_positive_cells': head_positive.sum(),
                 'head_negative_cells': head_negative.sum(),

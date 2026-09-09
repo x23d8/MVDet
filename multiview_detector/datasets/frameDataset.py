@@ -1,5 +1,6 @@
 import os
 import json
+import hashlib
 from scipy.stats import multivariate_normal
 from PIL import Image
 from scipy.sparse import coo_matrix
@@ -12,12 +13,16 @@ from multiview_detector.utils.projection import *
 class frameDataset(VisionDataset):
     def __init__(self, base, train=True, transform=ToTensor(), target_transform=ToTensor(),
                  reID=False, grid_reduce=4, img_reduce=4, train_ratio=0.9, force_download=True,
-                 annotation_dir=None):
+                 annotation_dir=None, max_frames=None):
         super().__init__(base.root, transform=transform, target_transform=target_transform)
 
         map_sigma, map_kernel_size = 20 / grid_reduce, 20
         img_sigma, img_kernel_size = 10 / img_reduce, 10
+        if max_frames is not None and max_frames < 1:
+            raise ValueError('max_frames must be positive when provided')
         self.reID, self.grid_reduce, self.img_reduce = reID, grid_reduce, img_reduce
+        self.train = bool(train)
+        self.max_frames = max_frames
 
         self.base = base
         self.root, self.num_cam, self.num_frame = base.root, base.num_cam, base.num_frame
@@ -29,10 +34,28 @@ class frameDataset(VisionDataset):
         self.img_shape, self.worldgrid_shape = base.img_shape, base.worldgrid_shape  # H,W; N_row,N_col
         self.reducedgrid_shape = list(map(lambda x: int(x / self.grid_reduce), self.worldgrid_shape))
 
-        if train:
-            frame_range = range(0, int(self.num_frame * train_ratio))
+        if self.train:
+            split_range = range(0, int(self.num_frame * train_ratio))
         else:
-            frame_range = range(int(self.num_frame * train_ratio), self.num_frame)
+            split_range = range(int(self.num_frame * train_ratio), self.num_frame)
+
+        available_frames = sorted(
+            int(os.path.splitext(fname)[0])
+            for fname in os.listdir(self.annotation_dir)
+            if os.path.splitext(fname)[1].lower() == '.json'
+            and os.path.splitext(fname)[0].isdigit()
+            and int(os.path.splitext(fname)[0]) in split_range
+        )
+        if not available_frames:
+            split = 'training' if self.train else 'validation'
+            raise ValueError(f'No annotation frames are available in the {split} split')
+        if max_frames is not None and len(available_frames) > max_frames:
+            # Even spacing avoids a local smoke test that covers only one
+            # short temporal segment while remaining deterministic.
+            indices = np.linspace(0, len(available_frames) - 1, max_frames, dtype=int)
+            available_frames = [available_frames[index] for index in indices]
+        self.frame_ids = tuple(available_frames)
+        frame_range = set(self.frame_ids)
 
         self.img_fpaths = self.base.get_image_fpaths(frame_range)
         self.map_gt = {}
@@ -78,21 +101,29 @@ class frameDataset(VisionDataset):
         if cache_root is None and is_kaggle_input:
             cache_root = '/kaggle/working/mvdet_cache'
         if cache_root is None:
-            return os.path.join(self.root, 'gt.txt')
+            # Split-specific ground truth is required for limited local
+            # validation and avoids writing generated files into the dataset.
+            cache_root = os.path.join(os.getcwd(), 'logs', 'cache')
 
         dataset_cache = os.path.join(
             os.path.abspath(os.path.expanduser(cache_root)),
             self.base.__name__.lower(),
         )
-        return os.path.join(dataset_cache, 'gt.txt')
+        frame_key = ','.join(map(str, self.frame_ids)).encode('utf-8')
+        frame_digest = hashlib.sha1(frame_key).hexdigest()[:10]
+        split = 'train' if self.train else 'test'
+        return os.path.join(dataset_cache, f'gt_{split}_{len(self.frame_ids)}_{frame_digest}.txt')
 
     def prepare_gt(self):
         # Evaluation always uses the complete annotations from the original
         # dataset, even when training targets come from dropped annotations.
         full_annotation_dir = os.path.join(self.root, 'annotations_positions')
         og_gt = []
+        selected_frames = set(self.frame_ids)
         for fname in sorted(os.listdir(full_annotation_dir)):
             frame = int(fname.split('.')[0])
+            if frame not in selected_frames:
+                continue
             with open(os.path.join(full_annotation_dir, fname)) as json_file:
                 all_pedestrians = json.load(json_file)
             for single_pedestrian in all_pedestrians:
@@ -107,6 +138,8 @@ class frameDataset(VisionDataset):
                     continue
                 grid_x, grid_y = self.base.get_worldgrid_from_pos(single_pedestrian['positionID'])
                 og_gt.append(np.array([frame, grid_x, grid_y]))
+        if not og_gt:
+            raise ValueError('Selected evaluation frames contain no ground-truth pedestrians')
         og_gt = np.stack(og_gt, axis=0)
         os.makedirs(os.path.dirname(self.gt_fpath), exist_ok=True)
         np.savetxt(self.gt_fpath, og_gt, '%d')

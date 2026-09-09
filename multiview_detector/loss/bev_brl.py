@@ -94,6 +94,7 @@ class BEVBRLLoss(nn.Module):
             mirror_beta=1.0,
             positive_weight=1.0,
             negative_weight=0.5,
+            hard_negative_weight=1.0,
             brl_weight=0.1,
             warmup_epochs=1,
             ramp_epochs=2,
@@ -147,6 +148,7 @@ class BEVBRLLoss(nn.Module):
         self.mirror_beta = mirror_beta
         self.positive_weight = positive_weight
         self.negative_weight = negative_weight
+        self.hard_negative_weight = hard_negative_weight
         self.brl_weight = brl_weight
         self.warmup_epochs = warmup_epochs
         self.ramp_epochs = ramp_epochs
@@ -309,7 +311,17 @@ class BEVBRLLoss(nn.Module):
         mirror_mask = self._limit_candidates(mirror_mask, mirror_rank, sparse_target)
         uncertain_mask = unlabeled_mask & ~reliable_negative_mask & ~mirror_mask
 
-        positive_element = (probability - target).square()
+        # BCE-with-logits keeps a strong positive gradient even when the
+        # classifier is initialized with a low foreground prior.  Probability
+        # MSE multiplies its gradient by p(1-p), which trapped the two-epoch
+        # local run near p=0.01 despite valid observed positives.  The Gaussian
+        # target remains a bounded soft target and the positive mask is
+        # unchanged.
+        positive_element = F.binary_cross_entropy_with_logits(
+            map_logits,
+            target,
+            reduction='none',
+        )
         negative_element = -(
             (1.0 - self.focal_alpha)
             * probability.pow(self.gamma_negative)
@@ -324,18 +336,24 @@ class BEVBRLLoss(nn.Module):
 
         loss_positive = masked_mean(positive_element, positive_mask)
         loss_negative = masked_mean(negative_element, reliable_negative_mask)
+        # A separate mean prevents a small number of high-confidence errors
+        # from being diluted by thousands of already-easy negatives.
+        loss_hard_negative = masked_mean(negative_element, hard_negative_mask)
         loss_mirror = masked_mean(mirror_element, mirror_mask)
         loss = (
             self.positive_weight * loss_positive
             + self.current_negative_weight * loss_negative
+            + self.hard_negative_weight * self.ramp_factor * loss_hard_negative
             + self.current_brl_weight * loss_mirror
         )
 
         self.last_stats = {
             'loss_positive': float(loss_positive.detach()),
             'loss_negative': float(loss_negative.detach()),
+            'loss_hard_negative': float(loss_hard_negative.detach()),
             'loss_mirror': float(loss_mirror.detach()),
             'negative_weight': float(self.current_negative_weight),
+            'hard_negative_weight': float(self.hard_negative_weight * self.ramp_factor),
             'brl_weight': float(self.current_brl_weight),
             'positive_cells': float(positive_mask.sum().detach()),
             'halo_cells': float(halo_mask.sum().detach()),
