@@ -1,5 +1,6 @@
 import os
 import json
+import hashlib
 from scipy.stats import multivariate_normal
 from PIL import Image
 from scipy.sparse import coo_matrix
@@ -18,6 +19,7 @@ class frameDataset(VisionDataset):
         map_sigma, map_kernel_size = 20 / grid_reduce, 20
         img_sigma, img_kernel_size = 10 / img_reduce, 10
         self.reID, self.grid_reduce, self.img_reduce = reID, grid_reduce, img_reduce
+        self.train = train
 
         self.base = base
         self.root, self.num_cam, self.num_frame = base.root, base.num_cam, base.num_frame
@@ -33,11 +35,12 @@ class frameDataset(VisionDataset):
             frame_range = range(0, int(self.num_frame * train_ratio))
         else:
             frame_range = range(int(self.num_frame * train_ratio), self.num_frame)
+        self.frame_ids = list(frame_range)
 
-        self.img_fpaths = self.base.get_image_fpaths(frame_range)
+        self.img_fpaths = self.base.get_image_fpaths(self.frame_ids)
         self.map_gt = {}
         self.imgs_head_foot_gt = {}
-        self.download(frame_range)
+        self.download(self.frame_ids)
 
         self.gt_fpath = self._get_gt_fpath()
         if not os.path.exists(self.gt_fpath) or force_download:
@@ -77,22 +80,29 @@ class frameDataset(VisionDataset):
 
         if cache_root is None and is_kaggle_input:
             cache_root = '/kaggle/working/mvdet_cache'
+        split = 'train' if self.train else 'test'
+        frame_key = ','.join(map(str, self.frame_ids)).encode('utf-8')
+        frame_digest = hashlib.sha1(frame_key).hexdigest()[:10]
+        filename = f'gt_{split}_{len(self.frame_ids)}_{frame_digest}.txt'
         if cache_root is None:
-            return os.path.join(self.root, 'gt.txt')
+            return os.path.join(self.root, filename)
 
         dataset_cache = os.path.join(
             os.path.abspath(os.path.expanduser(cache_root)),
             self.base.__name__.lower(),
         )
-        return os.path.join(dataset_cache, 'gt.txt')
+        return os.path.join(dataset_cache, filename)
 
     def prepare_gt(self):
         # Evaluation always uses the complete annotations from the original
         # dataset, even when training targets come from dropped annotations.
         full_annotation_dir = os.path.join(self.root, 'annotations_positions')
         og_gt = []
+        selected_frames = set(self.frame_ids)
         for fname in sorted(os.listdir(full_annotation_dir)):
             frame = int(fname.split('.')[0])
+            if frame not in selected_frames:
+                continue
             with open(os.path.join(full_annotation_dir, fname)) as json_file:
                 all_pedestrians = json.load(json_file)
             for single_pedestrian in all_pedestrians:
@@ -107,6 +117,8 @@ class frameDataset(VisionDataset):
                     continue
                 grid_x, grid_y = self.base.get_worldgrid_from_pos(single_pedestrian['positionID'])
                 og_gt.append(np.array([frame, grid_x, grid_y]))
+        if not og_gt:
+            raise ValueError('selected split contains no ground-truth pedestrians')
         og_gt = np.stack(og_gt, axis=0)
         os.makedirs(os.path.dirname(self.gt_fpath), exist_ok=True)
         np.savetxt(self.gt_fpath, og_gt, '%d')

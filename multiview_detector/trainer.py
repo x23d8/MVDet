@@ -17,11 +17,16 @@ class BaseTrainer(object):
         super(BaseTrainer, self).__init__()
 
 
+_DEFAULT_VIEW_CRITERION = object()
+
+
 class PerspectiveTrainer(BaseTrainer):
-    def __init__(self, model, criterion, logdir, denormalize, cls_thres=0.4, alpha=1.0):
+    def __init__(self, model, criterion, logdir, denormalize, cls_thres=0.4, alpha=1.0,
+                 view_criterion=_DEFAULT_VIEW_CRITERION):
         super(BaseTrainer, self).__init__()
         self.model = model
         self.criterion = criterion
+        self.view_criterion = criterion if view_criterion is _DEFAULT_VIEW_CRITERION else view_criterion
         self.cls_thres = cls_thres
         self.logdir = logdir
         self.denormalize = denormalize
@@ -29,10 +34,53 @@ class PerspectiveTrainer(BaseTrainer):
         self.last_train_metrics = {}
         self.last_test_metrics = {}
 
+    @staticmethod
+    def _probability(result, criterion):
+        return torch.sigmoid(result) if getattr(criterion, 'outputs_logits', False) else result
+
+    def _compute_loss(self, map_result, view_results, map_gt, view_targets, dataset):
+        if getattr(self.criterion, 'requires_multiview_context', False):
+            core_model = getattr(self.model, 'module', self.model)
+            map_loss = self.criterion(
+                map_result,
+                map_gt.to(map_result.device),
+                dataset.map_kernel,
+                view_logits=view_results,
+                projection_matrices=core_model.proj_mats,
+            )
+        else:
+            map_loss = self.criterion(
+                map_result, map_gt.to(map_result.device), dataset.map_kernel
+            )
+
+        if self.view_criterion is None:
+            view_loss = map_result.new_zeros(())
+        else:
+            view_loss = map_result.new_zeros(())
+            for view_result, view_target in zip(view_results, view_targets):
+                view_loss = view_loss + self.view_criterion(
+                    view_result,
+                    view_target.to(view_result.device),
+                    dataset.img_kernel,
+                )
+            view_loss = view_loss / max(len(view_targets), 1)
+        return map_loss + self.alpha * view_loss
+
+    def _update_loss_metrics(self, meters):
+        for prefix, criterion in (('bev', self.criterion), ('view', self.view_criterion)):
+            if criterion is None:
+                continue
+            for name, value in getattr(criterion, 'last_stats', {}).items():
+                meters.setdefault(f'{prefix}/{name}', AverageMeter()).update(value)
+
     def train(self, epoch, data_loader, optimizer, log_interval=100, cyclic_scheduler=None):
         self.model.train()
+        for criterion in (self.criterion, self.view_criterion):
+            if hasattr(criterion, 'set_epoch'):
+                criterion.set_epoch(epoch)
         losses = 0
         precision_s, recall_s = AverageMeter(), AverageMeter()
+        loss_metrics = {}
         t0 = time.time()
         t_b = time.time()
         t_forward = 0
@@ -42,15 +90,13 @@ class PerspectiveTrainer(BaseTrainer):
             map_res, imgs_res = self.model(data)
             t_f = time.time()
             t_forward += t_f - t_b
-            loss = 0
-            for img_res, img_gt in zip(imgs_res, imgs_gt):
-                loss += self.criterion(img_res, img_gt.to(img_res.device), data_loader.dataset.img_kernel)
-            loss = self.criterion(map_res, map_gt.to(map_res.device), data_loader.dataset.map_kernel) + \
-                   loss / len(imgs_gt) * self.alpha
+            loss = self._compute_loss(map_res, imgs_res, map_gt, imgs_gt, data_loader.dataset)
+            self._update_loss_metrics(loss_metrics)
             loss.backward()
             optimizer.step()
             losses += loss.item()
-            pred = (map_res > self.cls_thres).int().to(map_gt.device)
+            map_probability = self._probability(map_res, self.criterion)
+            pred = (map_probability > self.cls_thres).int().to(map_gt.device)
             true_positive = (pred.eq(map_gt) * pred.eq(1)).sum().item()
             false_positive = pred.sum().item() - true_positive
             false_negative = map_gt.sum().item() - true_positive
@@ -74,7 +120,8 @@ class PerspectiveTrainer(BaseTrainer):
                 print('Train Epoch: {}, Batch:{}, Loss: {:.6f}, '
                       'prec: {:.1f}%, recall: {:.1f}%, Time: {:.1f} (f{:.3f}+b{:.3f}), maxima: {:.3f}'.format(
                     epoch, (batch_idx + 1), losses / (batch_idx + 1), precision_s.avg * 100, recall_s.avg * 100,
-                    t_epoch, t_forward / (batch_idx + 1), t_backward / (batch_idx + 1), map_res.max()))
+                    t_epoch, t_forward / (batch_idx + 1), t_backward / (batch_idx + 1),
+                    map_probability.max()))
                 pass
 
         t1 = time.time()
@@ -89,6 +136,7 @@ class PerspectiveTrainer(BaseTrainer):
             'recall_percent': recall_s.avg * 100,
             'duration_seconds': t_epoch,
         }
+        self.last_train_metrics.update({name: meter.avg for name, meter in loss_metrics.items()})
 
         return losses / len(data_loader), precision_s.avg * 100
 
@@ -96,6 +144,7 @@ class PerspectiveTrainer(BaseTrainer):
         self.model.eval()
         losses = 0
         precision_s, recall_s = AverageMeter(), AverageMeter()
+        loss_metrics = {}
         all_res_list = []
         t0 = time.time()
         if res_fpath is not None:
@@ -103,8 +152,9 @@ class PerspectiveTrainer(BaseTrainer):
         for batch_idx, (data, map_gt, imgs_gt, frame) in enumerate(data_loader):
             with torch.no_grad():
                 map_res, imgs_res = self.model(data)
+                map_probability = self._probability(map_res, self.criterion)
             if res_fpath is not None:
-                map_grid_res = map_res.detach().cpu().squeeze()
+                map_grid_res = map_probability.detach().cpu().squeeze()
                 v_s = map_grid_res[map_grid_res > self.cls_thres].unsqueeze(1)
                 grid_ij = (map_grid_res > self.cls_thres).nonzero()
                 if data_loader.dataset.base.indexing == 'xy':
@@ -114,13 +164,10 @@ class PerspectiveTrainer(BaseTrainer):
                 all_res_list.append(torch.cat([torch.ones_like(v_s) * frame, grid_xy.float() *
                                                data_loader.dataset.grid_reduce, v_s], dim=1))
 
-            loss = 0
-            for img_res, img_gt in zip(imgs_res, imgs_gt):
-                loss += self.criterion(img_res, img_gt.to(img_res.device), data_loader.dataset.img_kernel)
-            loss = self.criterion(map_res, map_gt.to(map_res.device), data_loader.dataset.map_kernel) + \
-                   loss / len(imgs_gt) * self.alpha
+            loss = self._compute_loss(map_res, imgs_res, map_gt, imgs_gt, data_loader.dataset)
+            self._update_loss_metrics(loss_metrics)
             losses += loss.item()
-            pred = (map_res > self.cls_thres).int().to(map_gt.device)
+            pred = (map_probability > self.cls_thres).int().to(map_gt.device)
             true_positive = (pred.eq(map_gt) * pred.eq(1)).sum().item()
             false_positive = pred.sum().item() - true_positive
             false_negative = map_gt.sum().item() - true_positive
@@ -136,15 +183,16 @@ class PerspectiveTrainer(BaseTrainer):
             fig = plt.figure()
             subplt0 = fig.add_subplot(211, title="output")
             subplt1 = fig.add_subplot(212, title="target")
-            subplt0.imshow(map_res.cpu().detach().numpy().squeeze())
+            subplt0.imshow(map_probability.cpu().detach().numpy().squeeze())
             subplt1.imshow(self.criterion._traget_transform(map_res, map_gt, data_loader.dataset.map_kernel)
                            .cpu().detach().numpy().squeeze())
             plt.savefig(os.path.join(self.logdir, 'map.jpg'))
             plt.close(fig)
 
             # visualizing the heatmap for per-view estimation
-            heatmap0_head = imgs_res[0][0, 0].detach().cpu().numpy().squeeze()
-            heatmap0_foot = imgs_res[0][0, 1].detach().cpu().numpy().squeeze()
+            view_probability = self._probability(imgs_res[0], self.view_criterion)
+            heatmap0_head = view_probability[0, 0].detach().cpu().numpy().squeeze()
+            heatmap0_foot = view_probability[0, 1].detach().cpu().numpy().squeeze()
             img0 = self.denormalize(data[0, 0]).cpu().numpy().squeeze().transpose([1, 2, 0])
             img0 = Image.fromarray((img0 * 255).astype('uint8'))
             head_cam_result = add_heatmap_to_image(heatmap0_head, img0)
@@ -191,6 +239,7 @@ class PerspectiveTrainer(BaseTrainer):
             'detection_recall_percent': detection_recall,
             'duration_seconds': t_epoch,
         }
+        self.last_test_metrics.update({name: meter.avg for name, meter in loss_metrics.items()})
 
         return losses / len(data_loader), precision_s.avg * 100, moda
 

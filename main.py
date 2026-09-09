@@ -14,7 +14,7 @@ import torch.optim as optim
 import torchvision.transforms as T
 from dotenv import load_dotenv
 from multiview_detector.datasets import *
-from multiview_detector.loss.gaussian_mse import GaussianMSE
+from multiview_detector.loss import AdaptiveBRLLoss, GaussianMSE, MultiViewAdaptiveBRLLoss
 from multiview_detector.models.persp_trans_detector import PerspTransDetector
 from multiview_detector.models.image_proj_variant import ImageProjVariant
 from multiview_detector.models.res_proj_variant import ResProjVariant
@@ -143,6 +143,8 @@ def log_phase(run, phase, epoch, metrics, optimizer=None):
 
 
 def main(args):
+    if not 0 <= args.pa < 100:
+        raise ValueError('--pa must be in [0, 100)')
     # seed
     if args.seed is not None:
         np.random.seed(args.seed)
@@ -226,12 +228,44 @@ def main(args):
     else:
         raise Exception('no support for this variant')
 
+    loss_device = getattr(model, 'fusion_device', torch.device('cuda:0' if torch.cuda.is_available() else 'cpu'))
+
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.lr, steps_per_epoch=len(train_loader),
                                                     epochs=args.epochs)
 
-    # loss
-    criterion = GaussianMSE().cuda()
+    # Loss. With dropped annotations, zero means "unlabeled", not background.
+    resolved_loss = args.loss
+    if resolved_loss == 'auto':
+        resolved_loss = 'adaptive_brl' if args.pa > 0 else 'gaussian_mse'
+    if resolved_loss == 'gaussian_mse' and args.pa > 0:
+        raise ValueError(
+            'GaussianMSE treats missing positives as background; use --loss adaptive_brl for --pa > 0'
+        )
+    args.resolved_loss = resolved_loss
+    if resolved_loss == 'adaptive_brl':
+        annotation_probability = 1.0 - args.pa / 100.0
+        loss_kwargs = dict(
+            annotation_probability=annotation_probability,
+            gamma=args.brl_gamma,
+            background_weight=args.brl_background_weight,
+            pseudo_weight=args.brl_pseudo_weight,
+            warmup_epochs=args.brl_warmup_epochs,
+            ramp_epochs=args.brl_ramp_epochs,
+            max_pseudo_ratio=args.brl_max_pseudo_ratio,
+        )
+        if args.variant == 'img_proj':
+            criterion = AdaptiveBRLLoss(**loss_kwargs).to(loss_device)
+            view_criterion = None
+        else:
+            criterion = MultiViewAdaptiveBRLLoss(
+                min_views=args.brl_min_views,
+                **loss_kwargs,
+            ).to(loss_device)
+            view_criterion = AdaptiveBRLLoss(**loss_kwargs).to(loss_device)
+    else:
+        criterion = GaussianMSE().to(loss_device)
+        view_criterion = criterion if args.variant != 'img_proj' else None
 
     # local and W&B logging
     variant_logdir = os.path.join('logs', f'{args.dataset}_frame', args.variant)
@@ -266,14 +300,22 @@ def main(args):
     test_prec_s = []
     test_moda_s = []
 
-    trainer = PerspectiveTrainer(model, criterion, logdir, denormalize, args.cls_thres, args.alpha)
+    trainer = PerspectiveTrainer(
+        model,
+        criterion,
+        logdir,
+        denormalize,
+        args.cls_thres,
+        args.alpha,
+        view_criterion=view_criterion,
+    )
 
     # learn
     try:
         if args.resume is None:
             print('Testing before training...')
             reset_peak_gpu_memory()
-            trainer.test(test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, True)
+            trainer.test(test_loader, os.path.join(logdir, 'test.txt'), test_set.gt_fpath, True)
             log_phase(wandb_run, 'validation', 0, trainer.last_test_metrics)
 
             for epoch in tqdm.tqdm(range(1, args.epochs + 1)):
@@ -285,7 +327,7 @@ def main(args):
                 print('Testing...')
                 reset_peak_gpu_memory()
                 test_loss, test_prec, moda = trainer.test(test_loader, os.path.join(logdir, 'test.txt'),
-                                                          train_set.gt_fpath, True)
+                                                          test_set.gt_fpath, True)
                 log_phase(wandb_run, 'validation', epoch, trainer.last_test_metrics)
 
                 x_epoch.append(epoch)
@@ -305,7 +347,7 @@ def main(args):
 
         print('Test loaded model...')
         reset_peak_gpu_memory()
-        trainer.test(test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, True)
+        trainer.test(test_loader, os.path.join(logdir, 'test.txt'), test_set.gt_fpath, True)
         final_epoch = args.epochs if args.resume is None else 0
         log_phase(wandb_run, 'final_test', final_epoch, trainer.last_test_metrics)
     finally:
@@ -318,6 +360,8 @@ if __name__ == '__main__':
     parser.add_argument('--reID', action='store_true')
     parser.add_argument('--cls_thres', type=float, default=0.4)
     parser.add_argument('--alpha', type=float, default=1.0, help='ratio for per view loss')
+    parser.add_argument('--loss', choices=['auto', 'gaussian_mse', 'adaptive_brl'], default='auto',
+                        help='auto uses adaptive BRL for partial annotations and MSE otherwise')
     parser.add_argument('--variant', type=str, default='default',
                         choices=['default', 'img_proj', 'res_proj', 'no_joint_conv'])
     parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18'])
@@ -327,8 +371,8 @@ if __name__ == '__main__':
                         help='optional complete dataset root containing images and calibration')
     parser.add_argument('--dropped_path', type=str, default=None,
                         help='separate root containing partial annotations; may point to the dropped dataset or drop setting')
-    parser.add_argument('--pa', type=int, default=0, choices=[0, 20, 45, 60],
-                        help='percentage of training annotations dropped (default: 0/full annotations)')
+    parser.add_argument('--pa', type=int, default=0,
+                        help='percentage of training annotations dropped, in [0, 100)')
     parser.add_argument('-j', '--num_workers', type=int, default=4)
     parser.add_argument('-b', '--batch_size', type=int, default=1, metavar='N',
                         help='input batch size for training (default: 1)')
@@ -344,6 +388,15 @@ if __name__ == '__main__':
     parser.add_argument('--wandb_run_name', type=str, default=None, help='optional custom W&B run name')
     parser.add_argument('--wandb_mode', type=str, default='online', choices=['online', 'offline', 'disabled'],
                         help='W&B sync mode (default: online)')
+    parser.add_argument('--brl_gamma', type=float, default=2.0,
+                        help='focal exponent for adaptive BRL')
+    parser.add_argument('--brl_background_weight', type=float, default=1.0)
+    parser.add_argument('--brl_pseudo_weight', type=float, default=0.25)
+    parser.add_argument('--brl_warmup_epochs', type=int, default=1)
+    parser.add_argument('--brl_ramp_epochs', type=int, default=3)
+    parser.add_argument('--brl_min_views', type=int, default=2)
+    parser.add_argument('--brl_max_pseudo_ratio', type=float, default=1.0,
+                        help='multiplier on the propensity-derived missing-positive budget')
     args = parser.parse_args()
 
     main(args)

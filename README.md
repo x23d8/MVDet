@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Multiview Detection with Feature Perspective Transformation [[Website](https://hou-yz.github.io/publication/2020-eccv2020-mvdet)] [[arXiv](https://arxiv.org/abs/2007.07247)]
 
 ```
@@ -146,16 +145,30 @@ settings, only training targets come from
 `<Dataset>_dropped/drop<pa>/annotations_positions`; images, calibrations,
 validation labels, test labels, and evaluation ground truth remain from the
 complete dataset. Files in `hidden_annotations_positions` are deliberately
-excluded from the baseline loss. The supported settings are `0`, `20`, `45`,
-and `60`; `tools/simulate_dropped_anotations.py` generates the corresponding
+excluded from the baseline loss. Any integer drop percentage in `[0, 100)` is
+accepted when a matching `drop<percentage>` directory exists;
+`tools/simulate_dropped_anotations.py` generates the standard
 `drop20`, `drop45`, and `drop60` directories. Local outputs are separated under
 `logs/<dataset>_frame/<variant>/pa<pa>/` so concurrently launched settings do
 not share a checkpoint directory.
 
-This should automatically return evaluation results similar to the reported 88.2\% MODA on Wildtrack dataset. 
+For nonzero `--pa`, `--loss auto` selects the propensity-constrained adaptive
+BRL loss. It treats zero target cells as unlabeled, caps pseudo positives from
+the declared retained-label probability, and uses geometrically aligned
+agreement from at least two cameras. The fully annotated path remains the
+original Gaussian MSE by default.
+
+```shell script
+python main.py -d wildtrack --data_path /path/to/Wildtrack \
+  --dropped_path /path/to/Wildtrack_dropped --pa 45 --loss adaptive_brl
+```
+
+See [`docs/partial_annotation_loss_research.md`](docs/partial_annotation_loss_research.md)
+for the research synthesis, equation, limitations, and benchmark protocol.
+
+With the complete dataset and the published configuration, the MVDet paper
+reports 88.2% MODA on Wildtrack; reproduce and report local results rather than
+treating that number as guaranteed.
 
 ### Pre-trained models
 You can download the checkpoints at this [link](https://1drv.ms/u/s!AtzsQybTubHfhNRE9Iy8IjsGMXB17A?e=CCqhIQ).
-=======
-# multiview-pedestrian-detection
->>>>>>> mdp/anh_mvdet

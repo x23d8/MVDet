@@ -89,6 +89,21 @@ class PartialAnnotationPathTest(unittest.TestCase):
             self.assertEqual(Path(annotation_dir), (root / 'annotations_positions').resolve())
             self.assertIsNone(hidden_dir)
 
+    def test_arbitrary_drop_percentage_is_resolved(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            parent = Path(tmpdir)
+            full_root = parent / 'Wildtrack'
+            make_dataset(full_root, 'wildtrack')
+            setting = parent / 'Wildtrack_dropped' / 'drop37'
+            (setting / 'annotations_positions').mkdir(parents=True)
+            (setting / 'hidden_annotations_positions').mkdir()
+
+            annotation_dir, hidden_dir = resolve_annotation_dirs(
+                full_root, 'wildtrack', 37
+            )
+            self.assertEqual(Path(annotation_dir), setting / 'annotations_positions')
+            self.assertEqual(Path(hidden_dir), setting / 'hidden_annotations_positions')
+
     def test_resolves_sibling_dropped_annotations(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / 'Wildtrack'

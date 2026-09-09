@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from kornia.geometry.transform import warp_perspective
 from torchvision.models.vgg import vgg11
 from multiview_detector.models.resnet import resnet18
+from multiview_detector.models.device import resolve_model_devices
 
 import matplotlib.pyplot as plt
 
@@ -13,6 +14,7 @@ import matplotlib.pyplot as plt
 class PerspTransDetector(nn.Module):
     def __init__(self, dataset, arch='resnet18'):
         super().__init__()
+        self.front_device, self.fusion_device = resolve_model_devices()
         self.num_cam = dataset.num_cam
         self.img_shape, self.reducedgrid_shape = dataset.img_shape, dataset.reducedgrid_shape
         imgcoord2worldgrid_matrices = self.get_imgcoord2worldgrid_matrices(dataset.base.intrinsic_matrices,
@@ -34,24 +36,24 @@ class PerspTransDetector(nn.Module):
             base[-1] = nn.Sequential()
             base[-4] = nn.Sequential()
             split = 10
-            self.base_pt1 = base[:split].to('cuda:1')
-            self.base_pt2 = base[split:].to('cuda:0')
+            self.base_pt1 = base[:split].to(self.front_device)
+            self.base_pt2 = base[split:].to(self.fusion_device)
             out_channel = 512
         elif arch == 'resnet18':
             base = nn.Sequential(*list(resnet18(replace_stride_with_dilation=[False, True, True]).children())[:-2])
             split = 7
-            self.base_pt1 = base[:split].to('cuda:1')
-            self.base_pt2 = base[split:].to('cuda:0')
+            self.base_pt1 = base[:split].to(self.front_device)
+            self.base_pt2 = base[split:].to(self.fusion_device)
             out_channel = 512
         else:
             raise Exception('architecture currently support [vgg11, resnet18]')
         # 2.5cm -> 0.5m: 20x
         self.img_classifier = nn.Sequential(nn.Conv2d(out_channel, 64, 1), nn.ReLU(),
-                                            nn.Conv2d(64, 2, 1, bias=False)).to('cuda:0')
+                                            nn.Conv2d(64, 2, 1, bias=False)).to(self.fusion_device)
         self.map_classifier = nn.Sequential(nn.Conv2d(out_channel * self.num_cam + 2, 512, 3, padding=1), nn.ReLU(),
                                             # nn.Conv2d(512, 512, 5, 1, 2), nn.ReLU(),
                                             nn.Conv2d(512, 512, 3, padding=2, dilation=2), nn.ReLU(),
-                                            nn.Conv2d(512, 1, 3, padding=4, dilation=4, bias=False)).to('cuda:0')
+                                            nn.Conv2d(512, 1, 3, padding=4, dilation=4, bias=False)).to(self.fusion_device)
         pass
 
     def forward(self, imgs, visualize=False):
@@ -60,25 +62,27 @@ class PerspTransDetector(nn.Module):
         world_features = []
         imgs_result = []
         for cam in range(self.num_cam):
-            img_feature = self.base_pt1(imgs[:, cam].to('cuda:1'))
-            img_feature = self.base_pt2(img_feature.to('cuda:0'))
+            img_feature = self.base_pt1(imgs[:, cam].to(self.front_device))
+            img_feature = self.base_pt2(img_feature.to(self.fusion_device))
             img_feature = F.interpolate(img_feature, self.upsample_shape, mode='bilinear')
-            img_res = self.img_classifier(img_feature.to('cuda:0'))
+            img_res = self.img_classifier(img_feature.to(self.fusion_device))
             imgs_result.append(img_res)
-            proj_mat = self.proj_mats[cam].repeat([B, 1, 1]).float().to('cuda:0')
-            world_feature = warp_perspective(img_feature.to('cuda:0'), proj_mat, self.reducedgrid_shape)
+            proj_mat = self.proj_mats[cam].repeat([B, 1, 1]).float().to(self.fusion_device)
+            world_feature = warp_perspective(img_feature.to(self.fusion_device), proj_mat, self.reducedgrid_shape)
             if visualize:
                 plt.imshow(torch.norm(img_feature[0].detach(), dim=0).cpu().numpy())
                 plt.show()
                 plt.imshow(torch.norm(world_feature[0].detach(), dim=0).cpu().numpy())
                 plt.show()
-            world_features.append(world_feature.to('cuda:0'))
+            world_features.append(world_feature.to(self.fusion_device))
 
-        world_features = torch.cat(world_features + [self.coord_map.repeat([B, 1, 1, 1]).to('cuda:0')], dim=1)
+        world_features = torch.cat(
+            world_features + [self.coord_map.repeat([B, 1, 1, 1]).to(self.fusion_device)], dim=1
+        )
         if visualize:
             plt.imshow(torch.norm(world_features[0].detach(), dim=0).cpu().numpy())
             plt.show()
-        map_result = self.map_classifier(world_features.to('cuda:0'))
+        map_result = self.map_classifier(world_features.to(self.fusion_device))
         map_result = F.interpolate(map_result, self.reducedgrid_shape, mode='bilinear')
 
         if visualize:

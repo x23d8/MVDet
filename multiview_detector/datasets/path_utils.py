@@ -4,7 +4,6 @@ from collections import deque
 
 _KAGGLE_SEARCH_ROOTS = ('/kaggle/input', '/kaggle/working')
 _SKIP_DIRS = {'Image_subsets', 'annotations_positions', '.git', '__pycache__'}
-_PARTIAL_ANNOTATION_PERCENTAGES = (0, 20, 45, 60)
 
 # Structural signatures used to distinguish full or partially annotated copies
 # of the two supported datasets. The contents of annotations_positions may be
@@ -159,12 +158,8 @@ def resolve_annotation_dirs(
     back to the sibling of the complete dataset and ``search_root`` for
     backward compatibility. No machine-specific dataset path is embedded here.
     """
-    if partial_annotation_percent not in _PARTIAL_ANNOTATION_PERCENTAGES:
-        choices = ', '.join(map(str, _PARTIAL_ANNOTATION_PERCENTAGES))
-        raise ValueError(
-            f'Unsupported partial annotation percentage {partial_annotation_percent}. '
-            f'Choose one of: {choices}'
-        )
+    if not 0 <= partial_annotation_percent < 100:
+        raise ValueError('partial annotation percentage must be in [0, 100)')
 
     dataset_root = os.path.abspath(os.path.expanduser(os.fspath(dataset_root)))
     full_annotation_dir = os.path.join(dataset_root, 'annotations_positions')
