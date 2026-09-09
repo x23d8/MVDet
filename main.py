@@ -2,6 +2,7 @@ import os
 
 os.environ['OMP_NUM_THREADS'] = '1'
 import argparse
+import json
 import sys
 import shutil
 from distutils.dir_util import copy_tree
@@ -342,7 +343,10 @@ def main(args):
                 torch.save(model.state_dict(), os.path.join(logdir, 'MultiviewDetector.pth'))
         else:
             resume_fname = os.path.join(logdir, 'MultiviewDetector.pth')
-            model.load_state_dict(torch.load(resume_fname))
+            # A checkpoint saved by the original two-GPU split can be resumed
+            # on one GPU or CPU by remapping all serialized tensors first.
+            map_location = None if torch.cuda.device_count() > 1 else loss_device
+            model.load_state_dict(torch.load(resume_fname, map_location=map_location))
             model.eval()
 
         print('Test loaded model...')
@@ -350,6 +354,20 @@ def main(args):
         trainer.test(test_loader, os.path.join(logdir, 'test.txt'), test_set.gt_fpath, True)
         final_epoch = args.epochs if args.resume is None else 0
         log_phase(wandb_run, 'final_test', final_epoch, trainer.last_test_metrics)
+        metrics_path = os.path.join(logdir, 'final_metrics.json')
+        with open(metrics_path, 'w', encoding='utf-8') as metrics_file:
+            json.dump(
+                {
+                    'config': vars(args),
+                    'metrics': trainer.last_test_metrics,
+                    'result_file': os.path.abspath(os.path.join(logdir, 'test.txt')),
+                    'ground_truth_file': os.path.abspath(test_set.gt_fpath),
+                },
+                metrics_file,
+                indent=2,
+                sort_keys=True,
+            )
+        print(f'Final metrics written to {metrics_path}')
     finally:
         wandb_run.finish()
 

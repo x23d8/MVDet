@@ -230,6 +230,17 @@ python main.py -d multiviewx \
 
 Lặp tương tự cho drop/seed còn lại. Theo dõi `bev/pseudo_points`, `bev/expected_missing_points`, `bev/loss_*` và các thống kê view trên W&B. `pseudo_points` thấp kéo dài cho thấy camera consensus chưa đủ tốt; tăng pseudo weight không sửa được nguyên nhân này.
 
+Mỗi run hoàn tất ghi `final_metrics.json`. Sau khi có ít nhất ba seed khác nhau cho từng cặp dataset/drop, kiểm tra đồng thời toàn bộ ngưỡng bằng:
+
+```bash
+python tools/check_metric_thresholds.py \
+  logs/wildtrack_frame/default/pa45/*/final_metrics.json \
+  logs/multiviewx_frame/default/pa45/*/final_metrics.json \
+  --output logs/metric_gate_summary.json
+```
+
+Gate dùng điều kiện **lớn hơn nghiêm ngặt**, tách từng `pa`, từ chối seed trùng hoặc nhóm có dưới ba seed, và không chọn threshold trên test.
+
 ### Điều kiện chấp nhận
 
 Một cấu hình chỉ được coi là đạt nếu **mean ba seed** vượt đồng thời bốn ngưỡng của bảng tương ứng. Ngoài ra:

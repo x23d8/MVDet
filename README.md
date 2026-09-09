@@ -165,6 +165,17 @@ python main.py -d wildtrack --data_path /path/to/Wildtrack \
 
 See [`docs/partial_annotation_loss_research.md`](docs/partial_annotation_loss_research.md)
 for the research synthesis, equation, limitations, and benchmark protocol.
+Every completed run writes `final_metrics.json` in its log directory. Aggregate
+three or more distinct seeds and enforce all four strict metric gates with:
+
+```shell script
+python tools/check_metric_thresholds.py logs/**/final_metrics.json \
+  --output logs/metric_gate_summary.json
+```
+
+The model/loss integration can be checked without either dataset using
+`python tools/smoke_adaptive_brl.py`; it exercises a real forward/backward pass
+and automatically uses the original two-GPU split, one GPU, or CPU.
 
 With the complete dataset and the published configuration, the MVDet paper
 reports 88.2% MODA on Wildtrack; reproduce and report local results rather than
