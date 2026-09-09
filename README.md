@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Multiview Detection with Feature Perspective Transformation [[Website](https://hou-yz.github.io/publication/2020-eccv2020-mvdet)] [[arXiv](https://arxiv.org/abs/2007.07247)]
 
 ```
@@ -152,10 +151,37 @@ and `60`; `tools/simulate_dropped_anotations.py` generates the corresponding
 `logs/<dataset>_frame/<variant>/pa<pa>/` so concurrently launched settings do
 not share a checkpoint directory.
 
+### Partial-annotation-aware loss
+
+`--loss auto` is the default. It keeps the max-Gaussian MSE baseline for
+`--pa 0` and selects BEV-BRL plus partial-aware head/foot supervision whenever
+`--pa` is nonzero. Explicitly selecting `--loss gaussian_mse` with partial
+annotations is rejected because dense MSE would train every dropped pedestrian
+as background.
+
+```shell script
+python main.py -d wildtrack --data_path /path/to/Wildtrack_dataset --pa 45 --loss auto
+```
+
+For a partial run, the total objective is the BEV-BRL loss plus `--alpha`
+times the camera-view loss. Observed head/foot points use bounded max-Gaussian
+targets. Unlabelled head pixels are ignored by default. Unlabelled foot points
+become pseudo positives only after warm-up and only when fused BEV confidence
+and leave-one-view-out camera consensus agree. Reliable foot negatives also
+require valid multi-camera ground-plane coverage. Confidence-derived masks are
+detached from autograd.
+
+The default and `no_joint_conv` variants continue to project their C-channel
+backbone features unchanged. In `res_proj`, foot logits are converted to
+probabilities before projection. `img_proj` has no learned camera head, so its
+view loss and view consensus are disabled.
+
+Useful controls include `--brl_warmup_epochs`, `--brl_ramp_epochs`,
+`--brl_min_views`, `--brl_consensus_topk`, `--view_head_weight`, and
+`--view_foot_weight`. Keep `--view_head_negative_weight 0` unless an independent
+teacher or calibrated head-height model is added.
+
 This should automatically return evaluation results similar to the reported 88.2\% MODA on Wildtrack dataset. 
 
 ### Pre-trained models
 You can download the checkpoints at this [link](https://1drv.ms/u/s!AtzsQybTubHfhNRE9Iy8IjsGMXB17A?e=CCqhIQ).
-=======
-# multiview-pedestrian-detection
->>>>>>> mdp/anh_mvdet

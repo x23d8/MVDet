@@ -1,7 +1,7 @@
-import numpy as np
-import torch
 from torch import nn
 import torch.nn.functional as F
+
+from .heatmap import max_gaussian_target
 
 
 class GaussianMSE(nn.Module):
@@ -14,7 +14,4 @@ class GaussianMSE(nn.Module):
         return F.mse_loss(x, target)
 
     def _traget_transform(self, x, target, kernel):
-        target = F.adaptive_max_pool2d(target, x.shape[2:])
-        with torch.no_grad():
-            target = F.conv2d(target, kernel.float().to(target.device), padding=int((kernel.shape[-1] - 1) / 2))
-        return target
+        return max_gaussian_target(x, target, kernel)

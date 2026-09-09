@@ -50,6 +50,10 @@ class ResProjVariant(nn.Module):
         # 2.5cm -> 0.5m: 20x
         self.img_classifier = nn.Sequential(nn.Conv2d(out_channel, 64, 1), nn.ReLU(),
                                             nn.Conv2d(64, 2, 1, bias=False)).to('cuda:0')
+        # Gaussian-MSE historically projects the raw regression foot map.
+        # Partial BRL sets this flag so probabilities, not signed logits, are
+        # passed into the ground-plane fusion branch.
+        self.view_outputs_logits = False
         self.map_classifier = nn.Sequential(nn.Conv2d(self.num_cam + 2, 512, 3, padding=1), nn.ReLU(),
                                             # nn.Conv2d(512, 512, 5, 1, 2), nn.ReLU(),
                                             nn.Conv2d(512, 512, 3, padding=2, dilation=2), nn.ReLU(),
@@ -68,9 +72,13 @@ class ResProjVariant(nn.Module):
             img_res = self.img_classifier(img_feature.to('cuda:0'))
             imgs_result.append(img_res)
             proj_mat = self.proj_mats[cam].repeat([B, 1, 1]).float().to('cuda:0')
-            # head, *foot*
-            world_feature = kornia.warp_perspective(img_res[:, 1].unsqueeze(1).to('cuda:0'), proj_mat,
-                                                    self.reducedgrid_shape)
+            # head, *foot*. Never project signed logits as occupancy evidence.
+            foot_feature = img_res[:, 1:2]
+            if self.view_outputs_logits:
+                foot_feature = torch.sigmoid(foot_feature)
+            world_feature = kornia.warp_perspective(
+                foot_feature.to('cuda:0'), proj_mat, self.reducedgrid_shape
+            )
             if visualize:
                 plt.imshow(img_res[0, 0].detach().cpu().numpy())
                 plt.show()

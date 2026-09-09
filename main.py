@@ -2,6 +2,7 @@ import os
 
 os.environ['OMP_NUM_THREADS'] = '1'
 import argparse
+import math
 import sys
 import shutil
 from distutils.dir_util import copy_tree
@@ -10,11 +11,12 @@ from pathlib import Path
 import tqdm
 import numpy as np
 import torch
+import torch.nn as nn
 import torch.optim as optim
 import torchvision.transforms as T
 from dotenv import load_dotenv
 from multiview_detector.datasets import *
-from multiview_detector.loss.gaussian_mse import GaussianMSE
+from multiview_detector.loss import BEVBRLLoss, GaussianMSE, PartialViewBRLLoss
 from multiview_detector.models.persp_trans_detector import PerspTransDetector
 from multiview_detector.models.image_proj_variant import ImageProjVariant
 from multiview_detector.models.res_proj_variant import ResProjVariant
@@ -27,6 +29,36 @@ from multiview_detector.trainer import PerspectiveTrainer
 
 WANDB_ENTITY = 'GFA26AI02'
 WANDB_PROJECT = 'baseline-expriments'
+
+
+def configure_classifier_for_logits(classifier, foreground_prior=0.01):
+    """Add and initialize a foreground-prior bias on a classifier's last conv."""
+    if not 0 < foreground_prior < 1:
+        raise ValueError('foreground_prior must be between 0 and 1')
+    if not isinstance(classifier, nn.Sequential) or not isinstance(classifier[-1], nn.Conv2d):
+        raise TypeError('Expected a sequential classifier ending in nn.Conv2d')
+
+    old_conv = classifier[-1]
+    if old_conv.bias is None:
+        new_conv = nn.Conv2d(
+            old_conv.in_channels,
+            old_conv.out_channels,
+            old_conv.kernel_size,
+            stride=old_conv.stride,
+            padding=old_conv.padding,
+            dilation=old_conv.dilation,
+            groups=old_conv.groups,
+            bias=True,
+            padding_mode=old_conv.padding_mode,
+        ).to(device=old_conv.weight.device, dtype=old_conv.weight.dtype)
+        with torch.no_grad():
+            new_conv.weight.copy_(old_conv.weight)
+        classifier[-1] = new_conv
+        old_conv = new_conv
+
+    initial_bias = math.log(foreground_prior / (1.0 - foreground_prior))
+    with torch.no_grad():
+        old_conv.bias.fill_(initial_bias)
 
 
 def init_wandb(args, model, train_set, test_set, logdir):
@@ -226,12 +258,80 @@ def main(args):
     else:
         raise Exception('no support for this variant')
 
+    # loss
+    resolved_loss = args.loss
+    if resolved_loss == 'auto':
+        resolved_loss = 'bev_brl' if args.pa > 0 else 'gaussian_mse'
+    if args.pa > 0 and resolved_loss == 'gaussian_mse':
+        raise ValueError(
+            'GaussianMSE supervises every zero target as background and is unsafe for --pa > 0. '
+            'Use --loss bev_brl (or leave --loss auto).'
+        )
+    args.resolved_loss = resolved_loss
+
+    if resolved_loss == 'bev_brl':
+        configure_classifier_for_logits(model.map_classifier, args.brl_occupancy_prior)
+        use_consensus = not args.brl_no_consensus and args.variant != 'img_proj'
+        if args.variant == 'img_proj':
+            print('ImageProjVariant has no learned head/foot branch; disabling view loss and consensus.')
+            view_criterion = None
+        else:
+            configure_classifier_for_logits(model.img_classifier, args.view_occupancy_prior)
+            view_criterion = PartialViewBRLLoss(
+                positive_threshold=args.view_positive_threshold,
+                ignore_threshold=args.view_ignore_threshold,
+                negative_threshold=args.view_negative_threshold,
+                hard_negative_threshold=args.view_hard_negative_threshold,
+                pseudo_threshold=args.view_pseudo_threshold,
+                support_negative_threshold=args.view_support_negative_threshold,
+                support_positive_threshold=args.view_support_positive_threshold,
+                min_views=args.brl_min_views,
+                consensus_topk=args.brl_consensus_topk,
+                local_max_kernel=args.brl_local_max_kernel,
+                positive_weight=args.view_positive_weight,
+                negative_weight=args.view_negative_weight,
+                pseudo_weight=args.view_pseudo_weight,
+                head_weight=args.view_head_weight,
+                foot_weight=args.view_foot_weight,
+                head_negative_weight=args.view_head_negative_weight,
+                warmup_epochs=args.brl_warmup_epochs,
+                ramp_epochs=args.brl_ramp_epochs,
+                coverage_threshold=args.brl_coverage_threshold,
+                max_pseudo_per_observed=args.view_max_pseudo_per_observed,
+            ).cuda()
+            if args.variant == 'res_proj':
+                model.view_outputs_logits = True
+
+        criterion = BEVBRLLoss(
+            positive_threshold=args.brl_positive_threshold,
+            ignore_threshold=args.brl_ignore_threshold,
+            negative_threshold=args.brl_negative_threshold,
+            view_negative_threshold=args.brl_view_negative_threshold,
+            bev_threshold=args.brl_bev_threshold,
+            view_threshold=args.brl_view_threshold,
+            min_views=args.brl_min_views,
+            consensus_topk=args.brl_consensus_topk,
+            local_max_kernel=args.brl_local_max_kernel,
+            positive_weight=args.brl_positive_weight,
+            negative_weight=args.brl_negative_weight,
+            brl_weight=args.brl_weight,
+            warmup_epochs=args.brl_warmup_epochs,
+            ramp_epochs=args.brl_ramp_epochs,
+            negative_warmup_factor=args.brl_negative_warmup_factor,
+            coverage_threshold=args.brl_coverage_threshold,
+            max_mirror_per_observed=args.brl_max_mirror_per_observed,
+            use_consensus=use_consensus,
+            view_outputs_logits=True,
+        ).cuda()
+    else:
+        criterion = GaussianMSE().cuda()
+        view_criterion = criterion if args.variant != 'img_proj' else None
+
+    # Classifier layers may have been replaced to add logit biases.  Create the
+    # optimizer afterwards so every new parameter is trainable.
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.lr, steps_per_epoch=len(train_loader),
                                                     epochs=args.epochs)
-
-    # loss
-    criterion = GaussianMSE().cuda()
 
     # local and W&B logging
     variant_logdir = os.path.join('logs', f'{args.dataset}_frame', args.variant)
@@ -266,7 +366,15 @@ def main(args):
     test_prec_s = []
     test_moda_s = []
 
-    trainer = PerspectiveTrainer(model, criterion, logdir, denormalize, args.cls_thres, args.alpha)
+    trainer = PerspectiveTrainer(
+        model,
+        criterion,
+        logdir,
+        denormalize,
+        args.cls_thres,
+        args.alpha,
+        view_criterion=view_criterion,
+    )
 
     # learn
     try:
@@ -300,7 +408,10 @@ def main(args):
                 torch.save(model.state_dict(), os.path.join(logdir, 'MultiviewDetector.pth'))
         else:
             resume_fname = os.path.join(logdir, 'MultiviewDetector.pth')
-            model.load_state_dict(torch.load(resume_fname))
+            state_dict = torch.load(resume_fname)
+            incompatible = model.load_state_dict(state_dict, strict=resolved_loss != 'bev_brl')
+            if resolved_loss == 'bev_brl' and (incompatible.missing_keys or incompatible.unexpected_keys):
+                print('Loaded checkpoint with non-strict BRL compatibility:', incompatible)
             model.eval()
 
         print('Test loaded model...')
@@ -318,6 +429,9 @@ if __name__ == '__main__':
     parser.add_argument('--reID', action='store_true')
     parser.add_argument('--cls_thres', type=float, default=0.4)
     parser.add_argument('--alpha', type=float, default=1.0, help='ratio for per view loss')
+    parser.add_argument('--loss', type=str, default='auto',
+                        choices=['auto', 'gaussian_mse', 'bev_brl'],
+                        help='auto selects BEV-BRL for partial labels and GaussianMSE for full labels')
     parser.add_argument('--variant', type=str, default='default',
                         choices=['default', 'img_proj', 'res_proj', 'no_joint_conv'])
     parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18'])
@@ -344,6 +458,44 @@ if __name__ == '__main__':
     parser.add_argument('--wandb_run_name', type=str, default=None, help='optional custom W&B run name')
     parser.add_argument('--wandb_mode', type=str, default='online', choices=['online', 'offline', 'disabled'],
                         help='W&B sync mode (default: online)')
+    # BEV BRL assignment and weighting.
+    parser.add_argument('--brl_positive_threshold', type=float, default=0.10)
+    parser.add_argument('--brl_ignore_threshold', type=float, default=0.01)
+    parser.add_argument('--brl_negative_threshold', type=float, default=0.15)
+    parser.add_argument('--brl_view_negative_threshold', type=float, default=0.15)
+    parser.add_argument('--brl_bev_threshold', type=float, default=0.60)
+    parser.add_argument('--brl_view_threshold', type=float, default=0.55)
+    parser.add_argument('--brl_min_views', type=int, default=2)
+    parser.add_argument('--brl_consensus_topk', type=int, default=2)
+    parser.add_argument('--brl_local_max_kernel', type=int, default=3)
+    parser.add_argument('--brl_positive_weight', type=float, default=1.0)
+    parser.add_argument('--brl_negative_weight', type=float, default=0.50)
+    parser.add_argument('--brl_weight', type=float, default=0.10)
+    parser.add_argument('--brl_warmup_epochs', type=int, default=3)
+    parser.add_argument('--brl_ramp_epochs', type=int, default=3)
+    parser.add_argument('--brl_negative_warmup_factor', type=float, default=0.25)
+    parser.add_argument('--brl_coverage_threshold', type=float, default=0.50)
+    parser.add_argument('--brl_max_mirror_per_observed', type=float, default=1.50)
+    parser.add_argument('--brl_occupancy_prior', type=float, default=0.01)
+    parser.add_argument('--brl_no_consensus', action='store_true')
+
+    # Partial-aware camera head/foot supervision.
+    parser.add_argument('--view_positive_threshold', type=float, default=0.10)
+    parser.add_argument('--view_ignore_threshold', type=float, default=0.01)
+    parser.add_argument('--view_negative_threshold', type=float, default=0.15)
+    parser.add_argument('--view_hard_negative_threshold', type=float, default=0.60)
+    parser.add_argument('--view_pseudo_threshold', type=float, default=0.60)
+    parser.add_argument('--view_support_negative_threshold', type=float, default=0.15)
+    parser.add_argument('--view_support_positive_threshold', type=float, default=0.55)
+    parser.add_argument('--view_positive_weight', type=float, default=1.0)
+    parser.add_argument('--view_negative_weight', type=float, default=0.25)
+    parser.add_argument('--view_pseudo_weight', type=float, default=0.10)
+    parser.add_argument('--view_head_weight', type=float, default=0.25)
+    parser.add_argument('--view_foot_weight', type=float, default=1.0)
+    parser.add_argument('--view_head_negative_weight', type=float, default=0.0,
+                        help='zero keeps all unlabelled head pixels out of negative supervision')
+    parser.add_argument('--view_max_pseudo_per_observed', type=float, default=1.50)
+    parser.add_argument('--view_occupancy_prior', type=float, default=0.01)
     args = parser.parse_args()
 
     main(args)
