@@ -3,6 +3,7 @@ import os
 os.environ['OMP_NUM_THREADS'] = '1'
 import argparse
 import json
+import subprocess
 import sys
 import shutil
 from distutils.dir_util import copy_tree
@@ -41,6 +42,19 @@ class DisabledRun:
 
     def finish(self):
         pass
+
+
+def current_git_commit():
+    """Return the source revision recorded with each reproducible run."""
+    try:
+        return subprocess.check_output(
+            ['git', 'rev-parse', 'HEAD'],
+            cwd=Path(__file__).resolve().parent,
+            text=True,
+            stderr=subprocess.DEVNULL,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
 
 
 def init_wandb(args, model, train_set, test_set, logdir):
@@ -168,6 +182,7 @@ def main(args):
     cache_dir = args.cache_dir or os.path.join(os.getcwd(), '.cache', 'mvdet')
     args.cache_dir = os.path.abspath(os.path.expanduser(cache_dir))
     os.environ['MVDET_CACHE_DIR'] = args.cache_dir
+    args.git_commit = current_git_commit()
     # seed
     if args.seed is not None:
         np.random.seed(args.seed)

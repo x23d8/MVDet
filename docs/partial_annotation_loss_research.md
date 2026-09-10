@@ -253,7 +253,9 @@ Một cấu hình chỉ được coi là đạt nếu **mean ba seed** vượt �
 
 ## Rủi ro và giới hạn kết luận
 
-**Chưa có benchmark trong môi trường hiện tại.** Repository không kèm Wildtrack/MultiviewX. Nhánh này đã thay model-parallel cứng bằng fallback tự động cho hai GPU, một GPU và CPU, nhưng GPU hiện có khoảng 6 GB VRAM nên full benchmark có thể cần batch nhỏ hoặc phần cứng lớn hơn. Vì thiếu dữ liệu, hiện chỉ có thể xác minh unit/integration behavior của loss, chưa thể trung thực điền các metric mục tiêu.
+**Benchmark sơ bộ, chưa phải kết quả chấp nhận.** Môi trường hiện đã xác định được bản đầy đủ và các drop20/drop45/drop60 của cả Wildtrack lẫn MultiviewX trên ổ dữ liệu ngoài. Một run Wildtrack drop45, seed 1, một epoch đã hoàn tất trên RTX 4050 6 GB với AMP: MODA 32.46, MODP 73.47, precision 59.78 và recall 99.16. Epoch này nằm hoàn toàn trong warm-up (`ramp_factor=0`), nên chỉ chứng minh pipeline dữ liệu/đánh giá chạy end-to-end và chỉ ra failure mode over-detection; nó không chứng minh hiệu quả cuối cùng của pseudo supervision. Run 10 epoch đầu tiên đang được thực hiện với checkpoint mỗi epoch. Không metric mục tiêu nào được coi là đạt cho tới khi đủ ma trận nhiều seed và gate tự động pass.
+
+Chi phí đo được cho một epoch Wildtrack khoảng 96 phút trên GPU này; đánh giá test khoảng 6 phút. Vì vậy protocol dùng checkpoint đầy đủ và cho phép giảm số lần validation trung gian, nhưng luôn đánh giá epoch cuối. Đây là giới hạn thời gian thực nghiệm, không phải lý do để hạ điều kiện chấp nhận.
 
 **Giả định SCAR.** Công thức budget đúng cho simulator drop ngẫu nhiên trong frame. Nếu annotation thực tế ưu tiên người lớn/rõ hoặc bỏ sót người occluded, đó là SAR; một \(\rho\) toàn cục sẽ bias. Khi đó nên học propensity \(\rho(x)\) theo visibility, projected size và occlusion, hoặc báo cáo riêng strata thay vì tuyên bố generalization.[^9]
 

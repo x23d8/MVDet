@@ -3,11 +3,17 @@ import os
 import unittest
 from types import SimpleNamespace
 
-from main import DisabledRun, init_wandb
+from main import DisabledRun, current_git_commit, init_wandb
 from multiview_detector.utils.logger import Logger
 
 
 class MainRuntimeTest(unittest.TestCase):
+    def test_current_git_commit_is_recorded(self):
+        commit = current_git_commit()
+        self.assertIsNotNone(commit)
+        self.assertEqual(len(commit), 40)
+        int(commit, 16)
+
     def test_disabled_logging_does_not_import_or_require_wandb(self):
         args = SimpleNamespace(wandb_mode='disabled')
         with tempfile.TemporaryDirectory() as logdir:
