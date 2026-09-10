@@ -59,6 +59,7 @@ class AdaptiveBRLLoss(nn.Module):
     """
 
     outputs_logits = True
+    target_on_cpu = True
 
     def __init__(
             self,
@@ -155,10 +156,10 @@ class AdaptiveBRLLoss(nn.Module):
                 scores = evidence[batch_idx, channel_idx].reshape(-1)[flat_indices]
                 observed_indices = torch.nonzero(
                     pooled[batch_idx, channel_idx].reshape(-1) > 0, as_tuple=False
-                ).squeeze(1)
+                ).squeeze(1).to(evidence.device)
                 reference = torch.quantile(
-                    evidence[batch_idx, channel_idx].reshape(-1)[observed_indices], 0.25
-                )
+                    evidence[batch_idx, channel_idx].reshape(-1)[observed_indices].float(), 0.25
+                ).to(evidence.dtype)
                 calibrated = scores > reference + self.eps
                 flat_indices, scores = flat_indices[calibrated], scores[calibrated]
                 if flat_indices.numel() == 0:
@@ -195,12 +196,17 @@ class AdaptiveBRLLoss(nn.Module):
             if validity.shape != prediction.shape:
                 raise ValueError('validity shape must match prediction shape')
 
-        pseudo_target, pseudo_confidence, selected, expected_missing = self._pseudo_targets(
-            prediction, sparse_target.to(prediction.device), kernel, evidence, validity, observed
-        )
-        if self.ramp_factor == 0:
-            pseudo_target = torch.zeros_like(pseudo_target)
-            pseudo_confidence = torch.zeros_like(pseudo_confidence)
+        if self.ramp_factor == 0 or self.annotation_probability == 1.0:
+            pseudo_target = torch.zeros_like(prediction)
+            pseudo_confidence = torch.zeros_like(prediction)
+            selected = 0
+            expected_missing = float((sparse_target > 0).sum()) * (
+                1.0 - self.annotation_probability
+            ) / self.annotation_probability
+        else:
+            pseudo_target, pseudo_confidence, selected, expected_missing = self._pseudo_targets(
+                prediction, sparse_target, kernel, evidence, validity, observed
+            )
         positive_mask = (observed > self.positive_threshold) & validity
         pseudo_mask = (pseudo_target > self.positive_threshold) & ~positive_mask & validity
         ignore_mask = (observed > self.ignore_threshold) | (pseudo_target > self.ignore_threshold)
@@ -256,7 +262,12 @@ class MultiViewAdaptiveBRLLoss(AdaptiveBRLLoss):
         self.coverage_threshold = coverage_threshold
 
     def forward(self, prediction, sparse_target, kernel, view_logits=None, projection_matrices=None):
-        if view_logits is None or projection_matrices is None:
+        if (
+                view_logits is None
+                or projection_matrices is None
+                or self.ramp_factor == 0
+                or self.annotation_probability == 1.0
+        ):
             return super().forward(prediction, sparse_target, kernel)
         scores, visibility = project_foot_evidence(
             view_logits,

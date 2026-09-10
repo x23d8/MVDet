@@ -30,8 +30,23 @@ WANDB_ENTITY = 'GFA26AI02'
 WANDB_PROJECT = 'baseline-expriments'
 
 
+class DisabledRun:
+    """Small W&B-compatible sink used when experiment logging is disabled."""
+
+    def define_metric(self, *args, **kwargs):
+        pass
+
+    def log(self, *args, **kwargs):
+        pass
+
+    def finish(self):
+        pass
+
+
 def init_wandb(args, model, train_set, test_set, logdir):
     """Initialize one W&B run for either Wildtrack or MultiviewX."""
+    if args.wandb_mode == 'disabled':
+        return DisabledRun()
     try:
         import wandb
     except ImportError as exc:
@@ -146,6 +161,13 @@ def log_phase(run, phase, epoch, metrics, optimizer=None):
 def main(args):
     if not 0 <= args.pa < 100:
         raise ValueError('--pa must be in [0, 100)')
+    if args.eval_interval < 1:
+        raise ValueError('--eval_interval must be at least 1')
+    if args.resume is not None and args.resume_training is not None:
+        raise ValueError('--resume and --resume_training are mutually exclusive')
+    cache_dir = args.cache_dir or os.path.join(os.getcwd(), '.cache', 'mvdet')
+    args.cache_dir = os.path.abspath(os.path.expanduser(cache_dir))
+    os.environ['MVDET_CACHE_DIR'] = args.cache_dir
     # seed
     if args.seed is not None:
         np.random.seed(args.seed)
@@ -271,14 +293,15 @@ def main(args):
     # local and W&B logging
     variant_logdir = os.path.join('logs', f'{args.dataset}_frame', args.variant)
     pa_logdir = os.path.join(variant_logdir, f'pa{args.pa}')
-    if args.resume is None:
+    resume_run = args.resume_training or args.resume
+    if resume_run is None:
         logdir = os.path.join(pa_logdir, datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S'))
     else:
-        logdir = os.path.join(pa_logdir, args.resume)
-        legacy_logdir = os.path.join(variant_logdir, args.resume)
+        logdir = os.path.join(pa_logdir, resume_run)
+        legacy_logdir = os.path.join(variant_logdir, resume_run)
         if not os.path.isdir(logdir) and os.path.isdir(legacy_logdir):
             logdir = legacy_logdir
-    if args.resume is None:
+    if resume_run is None:
         os.makedirs(logdir, exist_ok=True)
         copy_tree('./multiview_detector', logdir + '/scripts/multiview_detector')
         for script in os.listdir('.'):
@@ -289,7 +312,10 @@ def main(args):
     wandb_run = init_wandb(args, model, train_set, test_set, logdir)
 
     if args.resume is None:
-        sys.stdout = Logger(os.path.join(logdir, 'log.txt'), )
+        sys.stdout = Logger(
+            os.path.join(logdir, 'log.txt'),
+            append=args.resume_training is not None,
+        )
     print('Settings:')
     print(vars(args))
 
@@ -309,38 +335,77 @@ def main(args):
         args.cls_thres,
         args.alpha,
         view_criterion=view_criterion,
+        amp=args.amp,
     )
 
     # learn
     try:
-        if args.resume is None:
+        start_epoch = 1
+        if args.resume_training is not None:
+            checkpoint_path = os.path.join(logdir, 'training_checkpoint.pth')
+            map_location = None if torch.cuda.device_count() > 1 else loss_device
+            checkpoint = torch.load(checkpoint_path, map_location=map_location)
+            planned_epochs = checkpoint.get('config', {}).get('epochs')
+            if planned_epochs is not None and int(planned_epochs) != args.epochs:
+                raise ValueError(
+                    '--epochs must match the original run when resuming OneCycleLR '
+                    f'(expected {planned_epochs}, got {args.epochs})'
+                )
+            model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+            if checkpoint.get('grad_scaler_state_dict'):
+                trainer.grad_scaler.load_state_dict(checkpoint['grad_scaler_state_dict'])
+            start_epoch = int(checkpoint['epoch']) + 1
+            print(f'Resuming training at epoch {start_epoch} from {checkpoint_path}')
+
+        if args.resume is None and args.resume_training is None and not args.skip_initial_test:
             print('Testing before training...')
             reset_peak_gpu_memory()
             trainer.test(test_loader, os.path.join(logdir, 'test.txt'), test_set.gt_fpath, True)
             log_phase(wandb_run, 'validation', 0, trainer.last_test_metrics)
 
-            for epoch in tqdm.tqdm(range(1, args.epochs + 1)):
+        evaluated_final_epoch = False
+        if args.resume is None:
+            for epoch in tqdm.tqdm(range(start_epoch, args.epochs + 1)):
                 print('Training...')
                 reset_peak_gpu_memory()
                 train_loss, train_prec = trainer.train(epoch, train_loader, optimizer, args.log_interval, scheduler)
                 log_phase(wandb_run, 'train', epoch, trainer.last_train_metrics, optimizer)
 
-                print('Testing...')
-                reset_peak_gpu_memory()
-                test_loss, test_prec, moda = trainer.test(test_loader, os.path.join(logdir, 'test.txt'),
-                                                          test_set.gt_fpath, True)
-                log_phase(wandb_run, 'validation', epoch, trainer.last_test_metrics)
-
-                x_epoch.append(epoch)
-                train_loss_s.append(train_loss)
-                train_prec_s.append(train_prec)
-                test_loss_s.append(test_loss)
-                test_prec_s.append(test_prec)
-                test_moda_s.append(moda)
-                draw_curve(os.path.join(logdir, 'learning_curve.jpg'), x_epoch, train_loss_s, train_prec_s,
-                           test_loss_s, test_prec_s, test_moda_s)
-                # save
+                # Save the complete training state before the relatively slow
+                # validation pass so an interruption never loses an epoch.
                 torch.save(model.state_dict(), os.path.join(logdir, 'MultiviewDetector.pth'))
+                torch.save(
+                    {
+                        'epoch': epoch,
+                        'model_state_dict': model.state_dict(),
+                        'optimizer_state_dict': optimizer.state_dict(),
+                        'scheduler_state_dict': scheduler.state_dict(),
+                        'grad_scaler_state_dict': trainer.grad_scaler.state_dict(),
+                        'config': vars(args),
+                    },
+                    os.path.join(logdir, 'training_checkpoint.pth'),
+                )
+
+                should_evaluate = epoch % args.eval_interval == 0 or epoch == args.epochs
+                if should_evaluate:
+                    print('Testing...')
+                    reset_peak_gpu_memory()
+                    test_loss, test_prec, moda = trainer.test(
+                        test_loader, os.path.join(logdir, 'test.txt'), test_set.gt_fpath, True
+                    )
+                    log_phase(wandb_run, 'validation', epoch, trainer.last_test_metrics)
+
+                    x_epoch.append(epoch)
+                    train_loss_s.append(train_loss)
+                    train_prec_s.append(train_prec)
+                    test_loss_s.append(test_loss)
+                    test_prec_s.append(test_prec)
+                    test_moda_s.append(moda)
+                    draw_curve(os.path.join(logdir, 'learning_curve.jpg'), x_epoch, train_loss_s, train_prec_s,
+                               test_loss_s, test_prec_s, test_moda_s)
+                    evaluated_final_epoch = epoch == args.epochs
         else:
             resume_fname = os.path.join(logdir, 'MultiviewDetector.pth')
             # A checkpoint saved by the original two-GPU split can be resumed
@@ -349,9 +414,10 @@ def main(args):
             model.load_state_dict(torch.load(resume_fname, map_location=map_location))
             model.eval()
 
-        print('Test loaded model...')
-        reset_peak_gpu_memory()
-        trainer.test(test_loader, os.path.join(logdir, 'test.txt'), test_set.gt_fpath, True)
+        if not evaluated_final_epoch:
+            print('Test loaded model...')
+            reset_peak_gpu_memory()
+            trainer.test(test_loader, os.path.join(logdir, 'test.txt'), test_set.gt_fpath, True)
         final_epoch = args.epochs if args.resume is None else 0
         log_phase(wandb_run, 'final_test', final_epoch, trainer.last_test_metrics)
         metrics_path = os.path.join(logdir, 'final_metrics.json')
@@ -389,6 +455,8 @@ if __name__ == '__main__':
                         help='optional complete dataset root containing images and calibration')
     parser.add_argument('--dropped_path', type=str, default=None,
                         help='separate root containing partial annotations; may point to the dropped dataset or drop setting')
+    parser.add_argument('--cache_dir', type=str, default=None,
+                        help='writable GT cache directory (default: .cache/mvdet)')
     parser.add_argument('--pa', type=int, default=0,
                         help='percentage of training annotations dropped, in [0, 100)')
     parser.add_argument('-j', '--num_workers', type=int, default=4)
@@ -401,7 +469,15 @@ if __name__ == '__main__':
     parser.add_argument('--log_interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
     parser.add_argument('--resume', type=str, default=None)
+    parser.add_argument('--resume_training', type=str, default=None,
+                        help='continue a run directory from training_checkpoint.pth')
     parser.add_argument('--visualize', action='store_true')
+    parser.add_argument('--amp', action='store_true',
+                        help='use CUDA automatic mixed precision to reduce memory and runtime')
+    parser.add_argument('--skip_initial_test', action='store_true',
+                        help='skip the untrained epoch-0 evaluation (useful for profiling)')
+    parser.add_argument('--eval_interval', type=int, default=1,
+                        help='evaluate every N epochs and always at the final epoch')
     parser.add_argument('--seed', type=int, default=1, help='random seed (default: None)')
     parser.add_argument('--wandb_run_name', type=str, default=None, help='optional custom W&B run name')
     parser.add_argument('--wandb_mode', type=str, default='online', choices=['online', 'offline', 'disabled'],

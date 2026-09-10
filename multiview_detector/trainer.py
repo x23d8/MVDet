@@ -1,6 +1,7 @@
 import time
 import torch
 import os
+import sys
 import numpy as np
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
@@ -22,7 +23,7 @@ _DEFAULT_VIEW_CRITERION = object()
 
 class PerspectiveTrainer(BaseTrainer):
     def __init__(self, model, criterion, logdir, denormalize, cls_thres=0.4, alpha=1.0,
-                 view_criterion=_DEFAULT_VIEW_CRITERION):
+                 view_criterion=_DEFAULT_VIEW_CRITERION, amp=False):
         super(BaseTrainer, self).__init__()
         self.model = model
         self.criterion = criterion
@@ -31,6 +32,8 @@ class PerspectiveTrainer(BaseTrainer):
         self.logdir = logdir
         self.denormalize = denormalize
         self.alpha = alpha
+        self.amp = bool(amp and torch.cuda.is_available())
+        self.grad_scaler = torch.amp.GradScaler('cuda', enabled=self.amp)
         self.last_train_metrics = {}
         self.last_test_metrics = {}
 
@@ -38,19 +41,27 @@ class PerspectiveTrainer(BaseTrainer):
     def _probability(result, criterion):
         return torch.sigmoid(result) if getattr(criterion, 'outputs_logits', False) else result
 
+    @staticmethod
+    def _loss_target(target, result, criterion):
+        if getattr(criterion, 'target_on_cpu', False):
+            return target
+        return target.to(result.device)
+
     def _compute_loss(self, map_result, view_results, map_gt, view_targets, dataset):
         if getattr(self.criterion, 'requires_multiview_context', False):
             core_model = getattr(self.model, 'module', self.model)
             map_loss = self.criterion(
                 map_result,
-                map_gt.to(map_result.device),
+                self._loss_target(map_gt, map_result, self.criterion),
                 dataset.map_kernel,
                 view_logits=view_results,
                 projection_matrices=core_model.proj_mats,
             )
         else:
             map_loss = self.criterion(
-                map_result, map_gt.to(map_result.device), dataset.map_kernel
+                map_result,
+                self._loss_target(map_gt, map_result, self.criterion),
+                dataset.map_kernel,
             )
 
         if self.view_criterion is None:
@@ -60,7 +71,7 @@ class PerspectiveTrainer(BaseTrainer):
             for view_result, view_target in zip(view_results, view_targets):
                 view_loss = view_loss + self.view_criterion(
                     view_result,
-                    view_target.to(view_result.device),
+                    self._loss_target(view_target, view_result, self.view_criterion),
                     dataset.img_kernel,
                 )
             view_loss = view_loss / max(len(view_targets), 1)
@@ -86,14 +97,28 @@ class PerspectiveTrainer(BaseTrainer):
         t_forward = 0
         t_backward = 0
         for batch_idx, (data, map_gt, imgs_gt, _) in enumerate(data_loader):
+            if batch_idx == 0:
+                print(f'First batch data loading: {time.time() - t_b:.3f}s', flush=True)
             optimizer.zero_grad()
-            map_res, imgs_res = self.model(data)
+            stage_start = time.time()
+            with torch.amp.autocast('cuda', enabled=self.amp):
+                map_res, imgs_res = self.model(data)
+            if batch_idx == 0:
+                print(f'First batch model forward: {time.time() - stage_start:.3f}s', flush=True)
             t_f = time.time()
             t_forward += t_f - t_b
-            loss = self._compute_loss(map_res, imgs_res, map_gt, imgs_gt, data_loader.dataset)
+            stage_start = time.time()
+            with torch.amp.autocast('cuda', enabled=self.amp):
+                loss = self._compute_loss(map_res, imgs_res, map_gt, imgs_gt, data_loader.dataset)
+            if batch_idx == 0:
+                print(f'First batch loss forward: {time.time() - stage_start:.3f}s', flush=True)
             self._update_loss_metrics(loss_metrics)
-            loss.backward()
-            optimizer.step()
+            stage_start = time.time()
+            self.grad_scaler.scale(loss).backward()
+            self.grad_scaler.step(optimizer)
+            self.grad_scaler.update()
+            if batch_idx == 0:
+                print(f'First batch backward/update: {time.time() - stage_start:.3f}s', flush=True)
             losses += loss.item()
             map_probability = self._probability(map_res, self.criterion)
             pred = (map_probability > self.cls_thres).int().to(map_gt.device)
@@ -122,6 +147,7 @@ class PerspectiveTrainer(BaseTrainer):
                     epoch, (batch_idx + 1), losses / (batch_idx + 1), precision_s.avg * 100, recall_s.avg * 100,
                     t_epoch, t_forward / (batch_idx + 1), t_backward / (batch_idx + 1),
                     map_probability.max()))
+                sys.stdout.flush()
                 pass
 
         t1 = time.time()
@@ -129,6 +155,7 @@ class PerspectiveTrainer(BaseTrainer):
         print('Train Epoch: {}, Batch:{}, Loss: {:.6f}, '
               'Precision: {:.1f}%, Recall: {:.1f}%, Time: {:.3f}'.format(
             epoch, len(data_loader), losses / len(data_loader), precision_s.avg * 100, recall_s.avg * 100, t_epoch))
+        sys.stdout.flush()
 
         self.last_train_metrics = {
             'loss': losses / len(data_loader),
@@ -150,7 +177,7 @@ class PerspectiveTrainer(BaseTrainer):
         if res_fpath is not None:
             assert gt_fpath is not None
         for batch_idx, (data, map_gt, imgs_gt, frame) in enumerate(data_loader):
-            with torch.no_grad():
+            with torch.no_grad(), torch.amp.autocast('cuda', enabled=self.amp):
                 map_res, imgs_res = self.model(data)
                 map_probability = self._probability(map_res, self.criterion)
             if res_fpath is not None:
@@ -164,7 +191,8 @@ class PerspectiveTrainer(BaseTrainer):
                 all_res_list.append(torch.cat([torch.ones_like(v_s) * frame, grid_xy.float() *
                                                data_loader.dataset.grid_reduce, v_s], dim=1))
 
-            loss = self._compute_loss(map_res, imgs_res, map_gt, imgs_gt, data_loader.dataset)
+            with torch.amp.autocast('cuda', enabled=self.amp):
+                loss = self._compute_loss(map_res, imgs_res, map_gt, imgs_gt, data_loader.dataset)
             self._update_loss_metrics(loss_metrics)
             losses += loss.item()
             pred = (map_probability > self.cls_thres).int().to(map_gt.device)

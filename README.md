@@ -163,6 +163,14 @@ python main.py -d wildtrack --data_path /path/to/Wildtrack \
   --dropped_path /path/to/Wildtrack_dropped --pa 45 --loss adaptive_brl
 ```
 
+Ground-truth evaluation caches default to the writable local path
+`.cache/mvdet`; override it with `--cache_dir` when needed. Passing
+`--wandb_mode disabled` does not import or require W&B.
+Long runs save `training_checkpoint.pth` after every epoch and can be continued
+with `--resume_training <run-directory-name>` using the original `--epochs`
+value. Use `--eval_interval N` to reduce intermediate validation overhead;
+the final epoch is always evaluated.
+
 See [`docs/partial_annotation_loss_research.md`](docs/partial_annotation_loss_research.md)
 for the research synthesis, equation, limitations, and benchmark protocol.
 Every completed run writes `final_metrics.json` in its log directory. Aggregate

@@ -22,8 +22,12 @@ def max_gaussian_target(prediction, sparse_target, kernel):
     if prediction.ndim != 4 or sparse_target.ndim != 4:
         raise ValueError('prediction and target must have shape [B, C, H, W]')
 
+    # Target construction has no gradient. Stamping dozens of tiny patches on
+    # CUDA launches one kernel per annotated person and is dramatically slower
+    # than doing the sparse work on CPU, then transferring one dense heatmap.
+    work_dtype = torch.float32
     pooled = F.adaptive_max_pool2d(
-        sparse_target.to(device=prediction.device, dtype=prediction.dtype),
+        sparse_target.detach().to(device='cpu', dtype=work_dtype),
         prediction.shape[-2:],
     )
     if pooled.shape[1] != prediction.shape[1]:
@@ -32,8 +36,8 @@ def max_gaussian_target(prediction, sparse_target, kernel):
         else:
             raise ValueError('target channels do not match prediction channels')
 
-    target = torch.zeros_like(prediction)
-    kernel = kernel.to(device=prediction.device, dtype=prediction.dtype)
+    target = torch.zeros(prediction.shape, device='cpu', dtype=work_dtype)
+    kernel = kernel.detach().to(device='cpu', dtype=work_dtype)
     height, width = prediction.shape[-2:]
     with torch.no_grad():
         for batch_idx in range(prediction.shape[0]):
@@ -54,7 +58,7 @@ def max_gaussian_target(prediction, sparse_target, kernel):
                     target[batch_idx, channel_idx, out_y0:out_y1, out_x0:out_x1] = torch.maximum(
                         current, patch
                     )
-    return target.clamp_(0.0, 1.0)
+    return target.clamp_(0.0, 1.0).to(device=prediction.device, dtype=prediction.dtype)
 
 
 def masked_mean(values, mask):
