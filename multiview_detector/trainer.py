@@ -84,7 +84,18 @@ class PerspectiveTrainer(BaseTrainer):
             for name, value in getattr(criterion, 'last_stats', {}).items():
                 meters.setdefault(f'{prefix}/{name}', AverageMeter()).update(value)
 
-    def train(self, epoch, data_loader, optimizer, log_interval=100, cyclic_scheduler=None):
+    def train(
+            self,
+            epoch,
+            data_loader,
+            optimizer,
+            log_interval=100,
+            cyclic_scheduler=None,
+            start_batch=0,
+            checkpoint_callback=None,
+    ):
+        if not 0 <= start_batch < len(data_loader):
+            raise ValueError('start_batch must identify a batch in data_loader')
         self.model.train()
         for criterion in (self.criterion, self.view_criterion):
             if hasattr(criterion, 'set_epoch'):
@@ -92,32 +103,40 @@ class PerspectiveTrainer(BaseTrainer):
         losses = 0
         precision_s, recall_s = AverageMeter(), AverageMeter()
         loss_metrics = {}
+        data_iterator = iter(data_loader)
+        for _ in range(start_batch):
+            next(data_iterator)
+
         t0 = time.time()
         t_b = time.time()
         t_forward = 0
         t_backward = 0
-        for batch_idx, (data, map_gt, imgs_gt, _) in enumerate(data_loader):
-            if batch_idx == 0:
+        processed_batches = 0
+        for batch_idx, (data, map_gt, imgs_gt, _) in enumerate(
+                data_iterator, start=start_batch
+        ):
+            processed_batches += 1
+            if processed_batches == 1:
                 print(f'First batch data loading: {time.time() - t_b:.3f}s', flush=True)
             optimizer.zero_grad()
             stage_start = time.time()
             with torch.amp.autocast('cuda', enabled=self.amp):
                 map_res, imgs_res = self.model(data)
-            if batch_idx == 0:
+            if processed_batches == 1:
                 print(f'First batch model forward: {time.time() - stage_start:.3f}s', flush=True)
             t_f = time.time()
             t_forward += t_f - t_b
             stage_start = time.time()
             with torch.amp.autocast('cuda', enabled=self.amp):
                 loss = self._compute_loss(map_res, imgs_res, map_gt, imgs_gt, data_loader.dataset)
-            if batch_idx == 0:
+            if processed_batches == 1:
                 print(f'First batch loss forward: {time.time() - stage_start:.3f}s', flush=True)
             self._update_loss_metrics(loss_metrics)
             stage_start = time.time()
             self.grad_scaler.scale(loss).backward()
             self.grad_scaler.step(optimizer)
             self.grad_scaler.update()
-            if batch_idx == 0:
+            if processed_batches == 1:
                 print(f'First batch backward/update: {time.time() - stage_start:.3f}s', flush=True)
             losses += loss.item()
             map_probability = self._probability(map_res, self.criterion)
@@ -130,8 +149,8 @@ class PerspectiveTrainer(BaseTrainer):
             precision_s.update(precision)
             recall_s.update(recall)
 
-            t_b = time.time()
-            t_backward += t_b - t_f
+            batch_end = time.time()
+            t_backward += batch_end - t_f
 
             if cyclic_scheduler is not None:
                 if isinstance(cyclic_scheduler, torch.optim.lr_scheduler.CosineAnnealingWarmRestarts):
@@ -144,28 +163,33 @@ class PerspectiveTrainer(BaseTrainer):
                 t_epoch = t1 - t0
                 print('Train Epoch: {}, Batch:{}, Loss: {:.6f}, '
                       'prec: {:.1f}%, recall: {:.1f}%, Time: {:.1f} (f{:.3f}+b{:.3f}), maxima: {:.3f}'.format(
-                    epoch, (batch_idx + 1), losses / (batch_idx + 1), precision_s.avg * 100, recall_s.avg * 100,
-                    t_epoch, t_forward / (batch_idx + 1), t_backward / (batch_idx + 1),
+                    epoch, (batch_idx + 1), losses / processed_batches,
+                    precision_s.avg * 100, recall_s.avg * 100,
+                    t_epoch, t_forward / processed_batches, t_backward / processed_batches,
                     map_probability.max()))
                 sys.stdout.flush()
-                pass
+            if checkpoint_callback is not None:
+                checkpoint_callback(epoch, batch_idx + 1)
+            # Exclude checkpoint serialization from the next batch's data/forward timing.
+            t_b = time.time()
 
         t1 = time.time()
         t_epoch = t1 - t0
         print('Train Epoch: {}, Batch:{}, Loss: {:.6f}, '
               'Precision: {:.1f}%, Recall: {:.1f}%, Time: {:.3f}'.format(
-            epoch, len(data_loader), losses / len(data_loader), precision_s.avg * 100, recall_s.avg * 100, t_epoch))
+            epoch, len(data_loader), losses / processed_batches,
+            precision_s.avg * 100, recall_s.avg * 100, t_epoch))
         sys.stdout.flush()
 
         self.last_train_metrics = {
-            'loss': losses / len(data_loader),
+            'loss': losses / processed_batches,
             'precision_percent': precision_s.avg * 100,
             'recall_percent': recall_s.avg * 100,
             'duration_seconds': t_epoch,
         }
         self.last_train_metrics.update({name: meter.avg for name, meter in loss_metrics.items()})
 
-        return losses / len(data_loader), precision_s.avg * 100
+        return losses / processed_batches, precision_s.avg * 100
 
     def test(self, data_loader, res_fpath=None, gt_fpath=None, visualize=False):
         self.model.eval()

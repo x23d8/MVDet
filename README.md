@@ -166,10 +166,14 @@ python main.py -d wildtrack --data_path /path/to/Wildtrack \
 Ground-truth evaluation caches default to the writable local path
 `.cache/mvdet`; override it with `--cache_dir` when needed. Passing
 `--wandb_mode disabled` does not import or require W&B.
-Long runs save `training_checkpoint.pth` after every epoch and can be continued
-with `--resume_training <run-directory-name>` using the original `--epochs`
-value. Use `--eval_interval N` to reduce intermediate validation overhead;
-the final epoch is always evaluated.
+Long runs atomically save `training_checkpoint.pth` every 25 batches by default
+and again at each completed epoch. They can be continued, including from the
+middle of an epoch, with `--resume_training <run-directory-name>` using the
+original `--epochs` value. The saved data-loader generator state recreates the
+same shuffled order before completed batches are skipped. Set
+`--checkpoint_interval N` to change the frequency (`0` means epoch-only).
+Use `--eval_interval N` to reduce intermediate validation overhead; the final
+epoch is always evaluated.
 
 See [`docs/partial_annotation_loss_research.md`](docs/partial_annotation_loss_research.md)
 for the research synthesis, equation, limitations, and benchmark protocol.

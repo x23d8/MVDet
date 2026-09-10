@@ -3,7 +3,14 @@ import os
 import unittest
 from types import SimpleNamespace
 
-from main import DisabledRun, current_git_commit, init_wandb
+import torch
+
+from main import (
+    DisabledRun,
+    current_git_commit,
+    init_wandb,
+    save_training_checkpoint,
+)
 from multiview_detector.utils.logger import Logger
 
 
@@ -34,6 +41,14 @@ class MainRuntimeTest(unittest.TestCase):
             resumed.close()
             with open(path, encoding='utf-8') as log_file:
                 self.assertEqual(log_file.read(), 'epoch 1\nepoch 2\n')
+
+    def test_checkpoint_replacement_is_atomic_and_has_no_temporary_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, 'training_checkpoint.pth')
+            save_training_checkpoint(path, {'epoch': 1})
+            save_training_checkpoint(path, {'epoch': 2})
+            self.assertEqual(torch.load(path, weights_only=True), {'epoch': 2})
+            self.assertFalse(os.path.exists(f'{path}.tmp'))
 
 
 if __name__ == '__main__':

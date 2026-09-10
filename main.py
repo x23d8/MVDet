@@ -57,6 +57,13 @@ def current_git_commit():
         return None
 
 
+def save_training_checkpoint(path, payload):
+    """Atomically replace a checkpoint so an interrupted save keeps the previous one."""
+    temporary_path = f'{path}.tmp'
+    torch.save(payload, temporary_path)
+    os.replace(temporary_path, path)
+
+
 def init_wandb(args, model, train_set, test_set, logdir):
     """Initialize one W&B run for either Wildtrack or MultiviewX."""
     if args.wandb_mode == 'disabled':
@@ -177,6 +184,8 @@ def main(args):
         raise ValueError('--pa must be in [0, 100)')
     if args.eval_interval < 1:
         raise ValueError('--eval_interval must be at least 1')
+    if args.checkpoint_interval < 0:
+        raise ValueError('--checkpoint_interval must be non-negative')
     if args.resume is not None and args.resume_training is not None:
         raise ValueError('--resume and --resume_training are mutually exclusive')
     cache_dir = args.cache_dir or os.path.join(os.getcwd(), '.cache', 'mvdet')
@@ -249,8 +258,16 @@ def main(args):
     # partial-annotation setting, so no alternate annotation directory is used.
     test_set = frameDataset(base, train=False, transform=train_trans, grid_reduce=4)
 
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
-                                               num_workers=args.num_workers, pin_memory=True)
+    train_generator = torch.Generator()
+    train_generator.manual_seed(args.seed if args.seed is not None else torch.initial_seed())
+    train_loader = torch.utils.data.DataLoader(
+        train_set,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        generator=train_generator,
+    )
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=args.batch_size, shuffle=False,
                                               num_workers=args.num_workers, pin_memory=True)
 
@@ -353,11 +370,31 @@ def main(args):
         amp=args.amp,
     )
 
+    checkpoint_path = os.path.join(logdir, 'training_checkpoint.pth')
+
+    def persist_training_state(epoch, next_batch, epoch_generator_state):
+        save_training_checkpoint(
+            checkpoint_path,
+            {
+                'epoch': int(epoch),
+                'next_batch_in_epoch': int(next_batch),
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(),
+                'grad_scaler_state_dict': trainer.grad_scaler.state_dict(),
+                # This is the state immediately before RandomSampler created
+                # the epoch permutation. Restoring it recreates that order.
+                'epoch_generator_state': epoch_generator_state.cpu(),
+                'config': vars(args),
+            },
+        )
+
     # learn
     try:
         start_epoch = 1
+        start_batch = 0
+        resumed_epoch_generator_state = None
         if args.resume_training is not None:
-            checkpoint_path = os.path.join(logdir, 'training_checkpoint.pth')
             map_location = None if torch.cuda.device_count() > 1 else loss_device
             checkpoint = torch.load(checkpoint_path, map_location=map_location)
             planned_epochs = checkpoint.get('config', {}).get('epochs')
@@ -371,8 +408,27 @@ def main(args):
             scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
             if checkpoint.get('grad_scaler_state_dict'):
                 trainer.grad_scaler.load_state_dict(checkpoint['grad_scaler_state_dict'])
-            start_epoch = int(checkpoint['epoch']) + 1
-            print(f'Resuming training at epoch {start_epoch} from {checkpoint_path}')
+
+            checkpoint_epoch = int(checkpoint['epoch'])
+            # Old epoch-only checkpoints have no next_batch_in_epoch and keep
+            # their historical behavior: resume at the following epoch.
+            if 'next_batch_in_epoch' not in checkpoint:
+                start_epoch = checkpoint_epoch + 1
+            else:
+                start_batch = int(checkpoint['next_batch_in_epoch'])
+                if start_batch >= len(train_loader):
+                    start_epoch = checkpoint_epoch + 1
+                    start_batch = 0
+                else:
+                    start_epoch = checkpoint_epoch
+                    resumed_epoch_generator_state = checkpoint.get('epoch_generator_state')
+                    if resumed_epoch_generator_state is None:
+                        raise ValueError('mid-epoch checkpoint is missing epoch_generator_state')
+                    train_generator.set_state(resumed_epoch_generator_state.cpu())
+            print(
+                f'Resuming training at epoch {start_epoch}, batch {start_batch} '
+                f'from {checkpoint_path}'
+            )
 
         if args.resume is None and args.resume_training is None and not args.skip_initial_test:
             print('Testing before training...')
@@ -383,32 +439,53 @@ def main(args):
         evaluated_final_epoch = False
         if args.resume is None:
             for epoch in tqdm.tqdm(range(start_epoch, args.epochs + 1)):
+                epoch_start_batch = start_batch if epoch == start_epoch else 0
+                if epoch_start_batch:
+                    epoch_generator_state = resumed_epoch_generator_state.cpu().clone()
+                else:
+                    epoch_generator_state = train_generator.get_state().clone()
+
+                def checkpoint_callback(current_epoch, next_batch):
+                    if (
+                            args.checkpoint_interval > 0
+                            and next_batch % args.checkpoint_interval == 0
+                    ):
+                        persist_training_state(
+                            current_epoch, next_batch, epoch_generator_state
+                        )
+                        print(
+                            f'Checkpoint saved at epoch {current_epoch}, '
+                            f'next batch {next_batch}',
+                            flush=True,
+                        )
+
                 print('Training...')
                 reset_peak_gpu_memory()
-                train_loss, train_prec = trainer.train(epoch, train_loader, optimizer, args.log_interval, scheduler)
+                train_loss, train_prec = trainer.train(
+                    epoch,
+                    train_loader,
+                    optimizer,
+                    args.log_interval,
+                    scheduler,
+                    start_batch=epoch_start_batch,
+                    checkpoint_callback=checkpoint_callback,
+                )
                 log_phase(wandb_run, 'train', epoch, trainer.last_train_metrics, optimizer)
 
-                # Save the complete training state before the relatively slow
-                # validation pass so an interruption never loses an epoch.
+                # An epoch-complete checkpoint is written before validation,
+                # so even interruption during evaluation loses no training.
+                persist_training_state(epoch, len(train_loader), epoch_generator_state)
                 torch.save(model.state_dict(), os.path.join(logdir, 'MultiviewDetector.pth'))
-                torch.save(
-                    {
-                        'epoch': epoch,
-                        'model_state_dict': model.state_dict(),
-                        'optimizer_state_dict': optimizer.state_dict(),
-                        'scheduler_state_dict': scheduler.state_dict(),
-                        'grad_scaler_state_dict': trainer.grad_scaler.state_dict(),
-                        'config': vars(args),
-                    },
-                    os.path.join(logdir, 'training_checkpoint.pth'),
-                )
 
                 should_evaluate = epoch % args.eval_interval == 0 or epoch == args.epochs
                 if should_evaluate:
                     print('Testing...')
                     reset_peak_gpu_memory()
                     test_loss, test_prec, moda = trainer.test(
-                        test_loader, os.path.join(logdir, 'test.txt'), test_set.gt_fpath, True
+                        test_loader,
+                        os.path.join(logdir, 'test.txt'),
+                        test_set.gt_fpath,
+                        True,
                     )
                     log_phase(wandb_run, 'validation', epoch, trainer.last_test_metrics)
 
@@ -418,8 +495,15 @@ def main(args):
                     test_loss_s.append(test_loss)
                     test_prec_s.append(test_prec)
                     test_moda_s.append(moda)
-                    draw_curve(os.path.join(logdir, 'learning_curve.jpg'), x_epoch, train_loss_s, train_prec_s,
-                               test_loss_s, test_prec_s, test_moda_s)
+                    draw_curve(
+                        os.path.join(logdir, 'learning_curve.jpg'),
+                        x_epoch,
+                        train_loss_s,
+                        train_prec_s,
+                        test_loss_s,
+                        test_prec_s,
+                        test_moda_s,
+                    )
                     evaluated_final_epoch = epoch == args.epochs
         else:
             resume_fname = os.path.join(logdir, 'MultiviewDetector.pth')
@@ -493,6 +577,8 @@ if __name__ == '__main__':
                         help='skip the untrained epoch-0 evaluation (useful for profiling)')
     parser.add_argument('--eval_interval', type=int, default=1,
                         help='evaluate every N epochs and always at the final epoch')
+    parser.add_argument('--checkpoint_interval', type=int, default=25,
+                        help='save resumable state every N batches; 0 means epoch-only')
     parser.add_argument('--seed', type=int, default=1, help='random seed (default: None)')
     parser.add_argument('--wandb_run_name', type=str, default=None, help='optional custom W&B run name')
     parser.add_argument('--wandb_mode', type=str, default='online', choices=['online', 'offline', 'disabled'],
