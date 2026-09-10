@@ -1,0 +1,155 @@
+# MVDet default configuration collected from main.py and W&B logging.
+
+wandb:
+  entity: GFA26AI02
+  project: baseline-expriments
+  mode: online
+  run_name: null
+  run_name_template: "{dataset}-pa{pa}-{variant}-{arch}-{job_type}-{YYYYMMDD-HHMMSS}"
+  job_type:
+    train: "used when resume is null"
+    inference: "used when resume is provided"
+  tags:
+    - dataset
+    - "pa{pa}"
+    - variant
+    - arch
+  auth_env:
+    preferred: WANDB_API_KEY
+    compatibility_alias: WANDB_API
+  metric_namespaces:
+    - train/*
+    - validation/*
+    - final_test/*
+    - gpu/*
+
+data:
+  dataset: null
+  dataset_choices:
+    - wildtrack
+    - multiviewx
+  data_path: null
+  dropped_path: null
+  cache_dir: null
+  train_ratio: 0.9
+  partial_annotation_percent: 0
+  annotation_drop_rate: 0.0
+  input_size:
+    height: 720
+    width: 1280
+  grid_reduce: 4
+  image_reduce: 4
+  normalize:
+    mean:
+      - 0.485
+      - 0.456
+      - 0.406
+    std:
+      - 0.229
+      - 0.224
+      - 0.225
+
+model:
+  variant: default
+  variant_choices:
+    - default
+    - img_proj
+    - res_proj
+    - no_joint_conv
+  arch: resnet18
+  arch_choices:
+    - vgg11
+    - resnet18
+  variant_class_map:
+    default: PerspTransDetector
+    img_proj: ImageProjVariant
+    res_proj: ResProjVariant
+    no_joint_conv: NoJointConvVariant
+  reID: false
+
+training:
+  epochs: 10
+  batch_size: 1
+  num_workers: 4
+  optimizer: SGD
+  lr: 0.1
+  momentum: 0.5
+  weight_decay: 0.0005
+  scheduler: OneCycleLR
+  alpha: 1.0
+  seed: 1
+  amp: false
+  log_interval: 10
+  checkpoint_interval: 25
+  resume: null
+  resume_training: null
+
+evaluation:
+  cls_thres: 0.4
+  eval_interval: 1
+  skip_initial_test: false
+  visualize: false
+  metrics:
+    - loss
+    - grid_precision_percent
+    - grid_recall_percent
+    - moda_percent
+    - modp_percent
+    - detection_precision_percent
+    - detection_recall_percent
+    - duration_seconds
+
+loss:
+  name: auto
+  choices:
+    - auto
+    - gaussian_mse
+    - adaptive_brl
+  auto_resolution:
+    pa_equals_0: gaussian_mse
+    pa_greater_than_0: adaptive_brl
+  adaptive_brl:
+    gamma: 2.0
+    background_weight: 1.0
+    pseudo_weight: 0.25
+    warmup_epochs: 1
+    ramp_epochs: 3
+    min_views: 2
+    max_pseudo_ratio: 1.0
+
+runtime_wandb_config:
+  model_name: "derived from selected model class"
+  model_variant: "${model.variant}"
+  architecture: "${model.arch}"
+  dataset_name: "${data.dataset}"
+  optimizer: "${training.optimizer}"
+  scheduler: "${training.scheduler}"
+  learning_rate: "${training.lr}"
+  momentum: "${training.momentum}"
+  weight_decay: "${training.weight_decay}"
+  batch_size: "${training.batch_size}"
+  epochs: "${training.epochs}"
+  alpha: "${training.alpha}"
+  classification_threshold: "${evaluation.cls_thres}"
+  num_workers: "${training.num_workers}"
+  seed: "${training.seed}"
+  grid_reduce: "${data.grid_reduce}"
+  image_reduce: "${data.image_reduce}"
+  train_ratio: "${data.train_ratio}"
+  input_size:
+    - "${data.input_size.height}"
+    - "${data.input_size.width}"
+  num_cameras: "derived from dataset"
+  train_samples: "derived from dataset split"
+  test_samples: "derived from dataset split"
+  partial_annotation_percent: "${data.partial_annotation_percent}"
+  annotation_drop_rate: "${data.annotation_drop_rate}"
+  train_annotation_dir: "resolved at runtime"
+  resume_checkpoint: "${training.resume}"
+  git_commit: "derived at runtime"
+
+outputs:
+  logdir_template: "logs/{dataset}_frame/{variant}/pa{pa}/{timestamp}"
+  checkpoint_file: MultiviewDetector.pth
+  training_checkpoint_file: training_checkpoint.pth
+  final_metrics_file: final_metrics.json
