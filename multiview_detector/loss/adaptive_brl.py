@@ -171,6 +171,10 @@ class AdaptiveBRLLoss(nn.Module):
                 # reliability weight (0.5 evidence contributes only 0.25).
                 confidence_points[batch_idx, channel_idx].reshape(-1)[kept] = (
                     evidence[batch_idx, channel_idx].reshape(-1)[kept].square()
+                    .to(
+                        device=confidence_points.device,
+                        dtype=confidence_points.dtype,
+                    )
                 )
                 selected_total += keep_count
 

@@ -69,6 +69,33 @@ class AdaptiveBRLTest(unittest.TestCase):
         self.assertEqual(loss_fn.last_stats['expected_missing_points'], 2)
         self.assertLess(logits.grad[0, 0, 4, 9].item(), 0)
 
+    def test_mixed_precision_evidence_matches_fp16_pseudo_target(self):
+        loss_fn = AdaptiveBRLLoss(
+            annotation_probability=0.5,
+            warmup_epochs=0,
+            ramp_epochs=0,
+        )
+        loss_fn.set_epoch(1)
+        prediction = torch.zeros(1, 1, 12, 12, dtype=torch.float16)
+        evidence = torch.full(prediction.shape, 0.1, dtype=torch.float32)
+        evidence[0, 0, 4, 9] = 0.95
+        evidence[0, 0, 7, 3] = 0.90
+        observed = max_gaussian_target(prediction, self.target, self.kernel)
+
+        pseudo_target, pseudo_confidence, selected, _ = loss_fn._pseudo_targets(
+            prediction,
+            self.target,
+            self.kernel,
+            evidence,
+            torch.ones_like(prediction, dtype=torch.bool),
+            observed,
+        )
+
+        self.assertEqual(selected, 2)
+        self.assertEqual(pseudo_target.dtype, torch.float16)
+        self.assertEqual(pseudo_confidence.dtype, torch.float16)
+        self.assertTrue(torch.isfinite(pseudo_confidence).all().item())
+
     def test_warmup_disables_pseudo_supervision(self):
         loss_fn = AdaptiveBRLLoss(annotation_probability=0.5, warmup_epochs=1)
         logits = torch.zeros(1, 1, 12, 12, requires_grad=True)
