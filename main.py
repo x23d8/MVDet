@@ -14,7 +14,11 @@ import torch.optim as optim
 import torchvision.transforms as T
 from dotenv import load_dotenv
 from multiview_detector.datasets import *
-from multiview_detector.loss.gaussian_mse import GaussianMSE
+from multiview_detector.loss import (
+    GaussianMSE,
+    MirrorFocalHeatmapLoss,
+    partial_annotation_defaults,
+)
 from multiview_detector.models.persp_trans_detector import PerspTransDetector
 from multiview_detector.models.image_proj_variant import ImageProjVariant
 from multiview_detector.models.res_proj_variant import ResProjVariant
@@ -230,8 +234,44 @@ def main(args):
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.lr, steps_per_epoch=len(train_loader),
                                                     epochs=args.epochs)
 
-    # loss
-    criterion = GaussianMSE().cuda()
+    # Loss: keep the fully annotated baseline unchanged, and switch to the
+    # dense heatmap adaptation of mirror focal loss for partial annotations.
+    resolved_loss = args.loss
+    if resolved_loss == 'auto':
+        resolved_loss = 'mirror_focal' if args.pa > 0 else 'gaussian_mse'
+    args.resolved_loss = resolved_loss
+    if resolved_loss == 'mirror_focal':
+        defaults = partial_annotation_defaults(args.pa)
+        threshold = defaults['threshold'] if args.mirror_threshold is None else args.mirror_threshold
+        beta = defaults['beta'] if args.mirror_beta is None else args.mirror_beta
+        background_weight = (
+            defaults['background_weight']
+            if args.mirror_background_weight is None else args.mirror_background_weight
+        )
+        args.resolved_mirror_threshold = threshold
+        args.resolved_mirror_beta = beta
+        args.resolved_mirror_background_weight = background_weight
+        criterion = MirrorFocalHeatmapLoss(
+            drop_rate=args.pa / 100.0,
+            threshold=threshold,
+            beta=beta,
+            background_weight=background_weight,
+            gamma_1=args.mirror_gamma_1,
+            gamma_2=args.mirror_gamma_2,
+            gaussian_weight=args.mirror_gaussian_weight,
+            focal_weight=args.mirror_focal_weight,
+            warmup_epochs=args.mirror_warmup_epochs,
+            ramp_epochs=args.mirror_ramp_epochs,
+            max_pseudo_ratio=args.mirror_max_pseudo_ratio,
+            local_max_kernel=args.mirror_local_max_kernel,
+        ).cuda()
+        print(
+            'Using MirrorFocalHeatmapLoss: '
+            f'threshold={threshold:.3f}, beta={beta:.3f}, '
+            f'background_weight={background_weight:.3f}'
+        )
+    else:
+        criterion = GaussianMSE().cuda()
 
     # local and W&B logging
     variant_logdir = os.path.join('logs', f'{args.dataset}_frame', args.variant)
@@ -318,6 +358,9 @@ if __name__ == '__main__':
     parser.add_argument('--reID', action='store_true')
     parser.add_argument('--cls_thres', type=float, default=0.4)
     parser.add_argument('--alpha', type=float, default=1.0, help='ratio for per view loss')
+    parser.add_argument('--loss', type=str, default='auto',
+                        choices=['auto', 'gaussian_mse', 'mirror_focal'],
+                        help='auto uses mirror focal for --pa > 0 and GaussianMSE for --pa 0')
     parser.add_argument('--variant', type=str, default='default',
                         choices=['default', 'img_proj', 'res_proj', 'no_joint_conv'])
     parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18'])
@@ -344,6 +387,22 @@ if __name__ == '__main__':
     parser.add_argument('--wandb_run_name', type=str, default=None, help='optional custom W&B run name')
     parser.add_argument('--wandb_mode', type=str, default='online', choices=['online', 'offline', 'disabled'],
                         help='W&B sync mode (default: online)')
+    parser.add_argument('--mirror_threshold', type=float, default=None,
+                        help='pseudo-positive confidence; default is derived from --pa')
+    parser.add_argument('--mirror_beta', type=float, default=None,
+                        help='mirror branch weight; default is hidden/observed odds capped at 1')
+    parser.add_argument('--mirror_background_weight', type=float, default=None,
+                        help='negative-label reliability; default is 1 - pa/100')
+    parser.add_argument('--mirror_gamma_1', type=float, default=2.0)
+    parser.add_argument('--mirror_gamma_2', type=float, default=2.0)
+    parser.add_argument('--mirror_gaussian_weight', type=float, default=1.0)
+    parser.add_argument('--mirror_focal_weight', type=float, default=0.25)
+    parser.add_argument('--mirror_warmup_epochs', type=int, default=1)
+    parser.add_argument('--mirror_ramp_epochs', type=int, default=3)
+    parser.add_argument('--mirror_max_pseudo_ratio', type=float, default=1.0,
+                        help='multiplier for the propensity-derived pseudo-label budget')
+    parser.add_argument('--mirror_local_max_kernel', type=int, default=5,
+                        help='odd local-max window used to suppress duplicate pseudo peaks')
     args = parser.parse_args()
 
     main(args)

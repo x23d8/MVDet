@@ -18,3 +18,6 @@ class GaussianMSE(nn.Module):
         with torch.no_grad():
             target = F.conv2d(target, kernel.float().to(target.device), padding=int((kernel.shape[-1] - 1) / 2))
         return target
+     
+    def _rotation_matrix(self,x,y):
+        pass
