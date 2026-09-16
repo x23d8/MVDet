@@ -141,7 +141,7 @@ python main.py -d wildtrack --data_path /path/to/Wildtrack_dataset --pa 45
 python main.py -d wildtrack --data_path /path/to/Wildtrack_dataset --pa 60
 ```
 
-`--pa 0` preserves the original full-annotation training behavior. For nonzero
+`--pa 0` uses complete annotations and disables the mirrored BEV branch. For nonzero
 settings, only training targets come from
 `<Dataset>_dropped/drop<pa>/annotations_positions`; images, calibrations,
 validation labels, test labels, and evaluation ground truth remain from the
@@ -151,6 +151,24 @@ and `60`; `tools/simulate_dropped_anotations.py` generates the corresponding
 `drop20`, `drop45`, and `drop60` directories. Local outputs are separated under
 `logs/<dataset>_frame/<variant>/pa<pa>/` so concurrently launched settings do
 not share a checkpoint directory.
+
+### Confidence-Guided Point-BRL trên BEV
+
+`main.py` dùng `PointBRLLoss` cho bản đồ BEV và tiếp tục dùng Gaussian MSE cho
+head/foot heatmap ở từng camera. BEV head trả logits; loss tính trực tiếp trên
+logits, còn phát hiện và NMS dùng xác suất sigmoid. Loss chia các ô thành ba
+nhóm: điểm GT đã annotate, nền thông thường và ô chưa annotate nhưng có xác
+suất người lớn hơn `--bev_confusion_threshold` (mặc định `0.7`). Nhóm thứ ba
+dùng mirrored focal loss với trọng số nhỏ (`--bev_confusion_weight`, mặc định
+`0.1`) để giảm tác động của người bị thiếu annotation. Mỗi nhóm được lấy trung
+bình riêng trước khi cộng trọng số; nhóm rỗng đóng góp 0.
+
+Hai epoch đầu (`--bev_warmup_epochs 2`) chỉ dùng loss âm thông thường cho ô
+chưa annotate; nhánh mirrored bắt đầu từ epoch 3. `--bev_guard_radius` mặc định
+`0`, tức chỉ bảo vệ chính điểm GT khỏi nhánh mirrored. Có thể tăng bán kính rất
+nhỏ để tránh khai thác lại peak sát GT. Khi validation dùng annotation đầy đủ,
+nhánh mirrored được tắt. Định nghĩa và chú thích chi tiết nằm trong
+`multiview_detector/loss/point_brl.py`; thiết kế gốc nằm trong `spec.md`.
 
 This should automatically return evaluation results similar to the reported 88.2\% MODA on Wildtrack dataset. 
 

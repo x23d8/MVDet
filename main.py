@@ -15,6 +15,7 @@ import torchvision.transforms as T
 from dotenv import load_dotenv
 from multiview_detector.datasets import *
 from multiview_detector.loss.gaussian_mse import GaussianMSE
+from multiview_detector.loss.point_brl import PointBRLLoss
 from multiview_detector.models.persp_trans_detector import PerspTransDetector
 from multiview_detector.models.image_proj_variant import ImageProjVariant
 from multiview_detector.models.res_proj_variant import ResProjVariant
@@ -230,8 +231,19 @@ def main(args):
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.lr, steps_per_epoch=len(train_loader),
                                                     epochs=args.epochs)
 
-    # loss
-    criterion = GaussianMSE().cuda()
+    # BEV dùng Point-BRL trên logits; nhánh ảnh giữ Gaussian MSE hiện có.
+    # Với nhãn đầy đủ (pa=0), không mirror các false positive đã biết.
+    criterion = PointBRLLoss(
+        confusion_threshold=args.bev_confusion_threshold,
+        gamma=args.bev_focal_gamma,
+        positive_weight=args.bev_positive_weight,
+        confusion_weight=args.bev_confusion_weight,
+        background_weight=args.bev_background_weight,
+        warmup_epochs=args.bev_warmup_epochs,
+        guard_radius=args.bev_guard_radius,
+        enable_confusion=args.pa > 0,
+    )
+    view_criterion = GaussianMSE()
 
     # local and W&B logging
     variant_logdir = os.path.join('logs', f'{args.dataset}_frame', args.variant)
@@ -266,7 +278,8 @@ def main(args):
     test_prec_s = []
     test_moda_s = []
 
-    trainer = PerspectiveTrainer(model, criterion, logdir, denormalize, args.cls_thres, args.alpha)
+    trainer = PerspectiveTrainer(model, criterion, logdir, denormalize, args.cls_thres,
+                                 args.alpha, view_criterion=view_criterion)
 
     # learn
     try:
@@ -318,6 +331,16 @@ if __name__ == '__main__':
     parser.add_argument('--reID', action='store_true')
     parser.add_argument('--cls_thres', type=float, default=0.4)
     parser.add_argument('--alpha', type=float, default=1.0, help='ratio for per view loss')
+    parser.add_argument('--bev_confusion_threshold', type=float, default=0.7,
+                        help='BEV probability above which an unlabelled point enters the mirrored branch')
+    parser.add_argument('--bev_focal_gamma', type=float, default=2.0)
+    parser.add_argument('--bev_positive_weight', type=float, default=1.0)
+    parser.add_argument('--bev_confusion_weight', type=float, default=0.1)
+    parser.add_argument('--bev_background_weight', type=float, default=1.0)
+    parser.add_argument('--bev_warmup_epochs', type=int, default=2,
+                        help='number of initial epochs with ordinary negative loss only')
+    parser.add_argument('--bev_guard_radius', type=int, default=0,
+                        help='small BEV cell radius around annotated points excluded from mirror mining')
     parser.add_argument('--variant', type=str, default='default',
                         choices=['default', 'img_proj', 'res_proj', 'no_joint_conv'])
     parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18'])

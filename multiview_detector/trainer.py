@@ -18,10 +18,14 @@ class BaseTrainer(object):
 
 
 class PerspectiveTrainer(BaseTrainer):
-    def __init__(self, model, criterion, logdir, denormalize, cls_thres=0.4, alpha=1.0):
+    def __init__(self, model, criterion, logdir, denormalize, cls_thres=0.4, alpha=1.0,
+                 view_criterion=None):
         super(BaseTrainer, self).__init__()
+        if view_criterion is None:
+            raise ValueError('view_criterion is required for camera heatmaps')
         self.model = model
         self.criterion = criterion
+        self.view_criterion = view_criterion
         self.cls_thres = cls_thres
         self.logdir = logdir
         self.denormalize = denormalize
@@ -31,6 +35,10 @@ class PerspectiveTrainer(BaseTrainer):
 
     def train(self, epoch, data_loader, optimizer, log_interval=100, cyclic_scheduler=None):
         self.model.train()
+        self.criterion.train()
+        if hasattr(self.criterion, 'set_epoch'):
+            # Epoch huấn luyện bắt đầu từ 1; Point-BRL dùng chỉ số từ 0.
+            self.criterion.set_epoch(epoch - 1)
         losses = 0
         precision_s, recall_s = AverageMeter(), AverageMeter()
         t0 = time.time()
@@ -44,13 +52,13 @@ class PerspectiveTrainer(BaseTrainer):
             t_forward += t_f - t_b
             loss = 0
             for img_res, img_gt in zip(imgs_res, imgs_gt):
-                loss += self.criterion(img_res, img_gt.to(img_res.device), data_loader.dataset.img_kernel)
-            loss = self.criterion(map_res, map_gt.to(map_res.device), data_loader.dataset.map_kernel) + \
+                loss += self.view_criterion(img_res, img_gt.to(img_res.device), data_loader.dataset.img_kernel)
+            loss = self.criterion(map_res, map_gt.to(map_res.device)) + \
                    loss / len(imgs_gt) * self.alpha
             loss.backward()
             optimizer.step()
             losses += loss.item()
-            pred = (map_res > self.cls_thres).int().to(map_gt.device)
+            pred = (map_res.sigmoid() > self.cls_thres).int().to(map_gt.device)
             true_positive = (pred.eq(map_gt) * pred.eq(1)).sum().item()
             false_positive = pred.sum().item() - true_positive
             false_negative = map_gt.sum().item() - true_positive
@@ -94,6 +102,7 @@ class PerspectiveTrainer(BaseTrainer):
 
     def test(self, data_loader, res_fpath=None, gt_fpath=None, visualize=False):
         self.model.eval()
+        self.criterion.eval()
         losses = 0
         precision_s, recall_s = AverageMeter(), AverageMeter()
         all_res_list = []
@@ -104,7 +113,8 @@ class PerspectiveTrainer(BaseTrainer):
             with torch.no_grad():
                 map_res, imgs_res = self.model(data)
             if res_fpath is not None:
-                map_grid_res = map_res.detach().cpu().squeeze()
+                # BEV head trả logits; ngưỡng và NMS cần xác suất [0, 1].
+                map_grid_res = map_res.detach().sigmoid().cpu().squeeze()
                 v_s = map_grid_res[map_grid_res > self.cls_thres].unsqueeze(1)
                 grid_ij = (map_grid_res > self.cls_thres).nonzero()
                 if data_loader.dataset.base.indexing == 'xy':
@@ -116,11 +126,11 @@ class PerspectiveTrainer(BaseTrainer):
 
             loss = 0
             for img_res, img_gt in zip(imgs_res, imgs_gt):
-                loss += self.criterion(img_res, img_gt.to(img_res.device), data_loader.dataset.img_kernel)
-            loss = self.criterion(map_res, map_gt.to(map_res.device), data_loader.dataset.map_kernel) + \
+                loss += self.view_criterion(img_res, img_gt.to(img_res.device), data_loader.dataset.img_kernel)
+            loss = self.criterion(map_res, map_gt.to(map_res.device)) + \
                    loss / len(imgs_gt) * self.alpha
             losses += loss.item()
-            pred = (map_res > self.cls_thres).int().to(map_gt.device)
+            pred = (map_res.sigmoid() > self.cls_thres).int().to(map_gt.device)
             true_positive = (pred.eq(map_gt) * pred.eq(1)).sum().item()
             false_positive = pred.sum().item() - true_positive
             false_negative = map_gt.sum().item() - true_positive
@@ -136,8 +146,8 @@ class PerspectiveTrainer(BaseTrainer):
             fig = plt.figure()
             subplt0 = fig.add_subplot(211, title="output")
             subplt1 = fig.add_subplot(212, title="target")
-            subplt0.imshow(map_res.cpu().detach().numpy().squeeze())
-            subplt1.imshow(self.criterion._traget_transform(map_res, map_gt, data_loader.dataset.map_kernel)
+            subplt0.imshow(map_res.sigmoid().cpu().detach().numpy().squeeze())
+            subplt1.imshow(self.criterion.point_mask(map_res, map_gt)
                            .cpu().detach().numpy().squeeze())
             plt.savefig(os.path.join(self.logdir, 'map.jpg'))
             plt.close(fig)
