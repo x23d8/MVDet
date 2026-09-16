@@ -1,6 +1,9 @@
 <<<<<<< HEAD
 # Multiview Detection with Feature Perspective Transformation [[Website](https://hou-yz.github.io/publication/2020-eccv2020-mvdet)] [[arXiv](https://arxiv.org/abs/2007.07247)]
 
+Run MVDet, SHOTBRL, or MVDeTr with the embedded partial annotation layout:
+[cfgmsel guide](CFGMSel.md).
+
 ```
 @inproceedings{hou2020multiview,
   title={Multiview Detection with Feature Perspective Transformation},

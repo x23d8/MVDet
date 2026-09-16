@@ -1,4 +1,38 @@
 import os
+import sys
+
+# Keep each upstream model's own tensor/trainer API in its runner directory.
+# This early dispatch avoids importing the MVDet package before choosing a model.
+if __name__ == '__main__' and any(
+        arg == '--model' or arg.startswith('--model=') for arg in sys.argv[1:]):
+    import subprocess
+    from pathlib import Path
+
+    argv = sys.argv[1:]
+    position = next(i for i, arg in enumerate(argv)
+                    if arg == '--model' or arg.startswith('--model='))
+    option = argv[position]
+    if option == '--model':
+        if position + 1 >= len(argv):
+            raise SystemExit('--model requires mvdet, shot, or mvdetr')
+        model_name = argv[position + 1]
+        del argv[position:position + 2]
+    else:
+        model_name = option.split('=', 1)[1]
+        del argv[position]
+    if model_name not in {'mvdet', 'shot', 'mvdetr'}:
+        raise SystemExit('--model must be mvdet, shot, or mvdetr')
+    if model_name != 'mvdet':
+        # Child runners use their own directory as cwd for local imports and
+        # logs. Keep a relative dataset path relative to the caller instead.
+        for index, arg in enumerate(argv):
+            if arg == '--data_path' and index + 1 < len(argv):
+                argv[index + 1] = str(Path(argv[index + 1]).resolve())
+            elif arg.startswith('--data_path='):
+                argv[index] = '--data_path=' + str(Path(arg.split('=', 1)[1]).resolve())
+        runner = Path(__file__).resolve().parent / ('SHOTBRL' if model_name == 'shot' else 'MVDeTr')
+        raise SystemExit(subprocess.call([sys.executable, 'main.py', *argv], cwd=runner))
+    sys.argv = [sys.argv[0], *argv]
 
 os.environ['OMP_NUM_THREADS'] = '1'
 import argparse
@@ -15,6 +49,7 @@ import torchvision.transforms as T
 from dotenv import load_dotenv
 from multiview_detector.datasets import *
 from multiview_detector.loss.gaussian_mse import GaussianMSE
+from multiview_detector.loss.confuse_gaussian_mse import ConfuseGaussianMSE
 from multiview_detector.models.persp_trans_detector import PerspTransDetector
 from multiview_detector.models.image_proj_variant import ImageProjVariant
 from multiview_detector.models.res_proj_variant import ResProjVariant
@@ -29,8 +64,23 @@ WANDB_ENTITY = 'GFA26AI02'
 WANDB_PROJECT = 'baseline-expriments'
 
 
+class DisabledRun:
+    """Keep local training usable when experiment tracking is disabled."""
+
+    def define_metric(self, *args, **kwargs):
+        pass
+
+    def log(self, *args, **kwargs):
+        pass
+
+    def finish(self):
+        pass
+
+
 def init_wandb(args, model, train_set, test_set, logdir):
     """Initialize one W&B run for either Wildtrack or MultiviewX."""
+    if args.wandb_mode == 'disabled':
+        return DisabledRun()
     try:
         import wandb
     except ImportError as exc:
@@ -231,11 +281,16 @@ def main(args):
                                                     epochs=args.epochs)
 
     # loss
-    criterion = GaussianMSE().cuda()
+    selected_loss = args.loss if args.loss != 'auto' else ('confuse_gaussian' if args.pa else 'mse')
+    args.resolved_loss = selected_loss
+    criterion = (ConfuseGaussianMSE(args.confuse_pred_thr, args.confuse_beta,
+                                   not args.confuse_no_mirror)
+                 if selected_loss == 'confuse_gaussian' else GaussianMSE()).cuda()
+    print(f'Loss: {selected_loss}')
 
     # local and W&B logging
     variant_logdir = os.path.join('logs', f'{args.dataset}_frame', args.variant)
-    pa_logdir = os.path.join(variant_logdir, f'pa{args.pa}')
+    pa_logdir = os.path.join(variant_logdir, f'pa{args.pa}', selected_loss)
     if args.resume is None:
         logdir = os.path.join(pa_logdir, datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S'))
     else:
@@ -315,9 +370,19 @@ def main(args):
 if __name__ == '__main__':
     # settings
     parser = argparse.ArgumentParser(description='Multiview detector')
+    parser.add_argument('--model', choices=['mvdet', 'shot', 'mvdetr'], default='mvdet',
+                        help='runner; SHOT and MVDeTr use their dedicated packages')
     parser.add_argument('--reID', action='store_true')
     parser.add_argument('--cls_thres', type=float, default=0.4)
     parser.add_argument('--alpha', type=float, default=1.0, help='ratio for per view loss')
+    parser.add_argument('--loss', choices=['auto', 'mse', 'confuse_gaussian'], default='auto',
+                        help='auto uses ConfuseGaussianMSE for partial labels and MSE for full labels')
+    parser.add_argument('--confuse_pred_thr', type=float, default=0.3,
+                        help='prediction threshold for a possible missing annotation')
+    parser.add_argument('--confuse_beta', type=float, default=0.1,
+                        help='weight of the loss at confused background pixels')
+    parser.add_argument('--confuse_no_mirror', action='store_true',
+                        help='downweight confused pixels instead of pulling them toward one')
     parser.add_argument('--variant', type=str, default='default',
                         choices=['default', 'img_proj', 'res_proj', 'no_joint_conv'])
     parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18'])

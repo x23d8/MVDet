@@ -79,6 +79,19 @@ class DatasetDetectionTest(unittest.TestCase):
 
 
 class PartialAnnotationPathTest(unittest.TestCase):
+    def test_prefers_drop_annotations_inside_complete_dataset(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / 'Wildtrack'
+            make_dataset(root, 'wildtrack')
+            setting = root / 'drop_annotations' / 'drop_45'
+            (setting / 'annotations_positions').mkdir(parents=True)
+            (setting / 'hidden_annotations_positions').mkdir()
+
+            observed, hidden = resolve_annotation_dirs(root, 'wildtrack', 45)
+
+            self.assertEqual(Path(observed), (setting / 'annotations_positions').resolve())
+            self.assertEqual(Path(hidden), (setting / 'hidden_annotations_positions').resolve())
+
     def test_pa_zero_uses_full_annotations(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / 'Wildtrack'
