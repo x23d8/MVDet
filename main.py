@@ -1,3 +1,17 @@
+# Example runs from the repository root (Bash; this MVDet model uses cuda:0 and cuda:1):
+#   CUDA_VISIBLE_DEVICES=0,1 python main.py -d wildtrack --pa 0
+#   CUDA_VISIBLE_DEVICES=0,1 python main.py -d multiviewx --pa 0
+# Partial annotations: --pa selects drop20/drop45/drop60 for training labels.
+# With --loss auto (the default), --pa 0 uses MSE and --pa > 0 uses ConfuseGaussianMSE.
+#   CUDA_VISIBLE_DEVICES=0,1 python main.py -d wildtrack --pa 20
+#   CUDA_VISIBLE_DEVICES=0,1 python main.py -d multiviewx --pa 45
+#   CUDA_VISIBLE_DEVICES=0,1 python main.py -d multiviewx --pa 60 --loss mse
+# Compare the loss on the same partial-label setting:
+#   CUDA_VISIBLE_DEVICES=0,1 python main.py -d wildtrack --pa 45 --loss confuse_gaussian --confuse_pred_thr 0.3 --confuse_beta 0.1
+# When complete data and dropped annotations are mounted separately:
+#   CUDA_VISIBLE_DEVICES=0,1 python main.py -d multiviewx --data_path /path/to/MultiviewX --dropped_path /path/to/MultiviewX_dropped --pa 45
+# Add --wandb_mode disabled to run without W&B tracking.
+
 import os
 import sys
 
