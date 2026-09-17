@@ -1,5 +1,9 @@
 # cfgmsel: MVDet, SHOTBRL, MVDeTr with partial annotations
 
+The separate [point-based BEV loss pseudo code](POINT_BRL_PSEUDOCODE.md) is
+preserved from `debrl`. It is a different loss from ConfuseGaussianMSE and is
+not selected by the commands below.
+
 ## Dataset layout
 
 Run `simulate_dropped_anotations.py` on the complete dataset first. The
