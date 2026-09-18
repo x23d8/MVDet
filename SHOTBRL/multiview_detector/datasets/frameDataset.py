@@ -12,7 +12,7 @@ from multiview_detector.utils.projection import *
 class frameDataset(VisionDataset):
     def __init__(self, base, train=True, transform=ToTensor(), target_transform=ToTensor(),
                  reID=False, grid_reduce=4, img_reduce=4, train_ratio=0.9, force_download=True,
-                 drop_ratio=0):
+                 drop_ratio=0, gt_fpath=None):
         super().__init__(base.root, transform=transform, target_transform=target_transform)
 
         map_sigma, map_kernel_size = 20 / grid_reduce, 20
@@ -45,7 +45,7 @@ class frameDataset(VisionDataset):
         self.imgs_head_foot_gt = {}
         self.download(frame_range)
 
-        self.gt_fpath = os.path.join(self.root, 'gt.txt')
+        self.gt_fpath = gt_fpath or os.path.join(self.root, 'gt.txt')
         if not os.path.exists(self.gt_fpath) or force_download:
             self.prepare_gt()
 

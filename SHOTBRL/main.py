@@ -54,22 +54,40 @@ def main(args):
     else:
         torch.backends.cudnn.benchmark = True
 
+    output_root = os.path.abspath(os.path.expanduser(args.output_root))
+
     # dataset
     normalize = T.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
     denormalize = img_color_denormalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
     train_trans = T.Compose([T.Resize([720, 1280]), T.ToTensor(), normalize, ])
+    if args.data_root is not None:
+        data_path = os.path.abspath(os.path.expanduser(args.data_root))
+    elif 'wildtrack' in args.dataset:
+        data_path = os.path.abspath(os.path.expanduser('../Data/Wildtrack'))
+    elif 'multiviewx' in args.dataset:
+        data_path = os.path.abspath(os.path.expanduser('../Data/MultiviewX'))
+    else:
+        raise Exception('must choose from [wildtrack, multiviewx]')
+    if not os.path.isdir(data_path):
+        raise FileNotFoundError(f'Dataset root not found: {data_path}')
+
     if 'wildtrack' in args.dataset:
-        data_path = os.path.expanduser('../Data/Wildtrack')
         base = Wildtrack(data_path)
     elif 'multiviewx' in args.dataset:
-        data_path = os.path.expanduser('../Data/MultiviewX')
         base = MultiviewX(data_path)
     else:
         raise Exception('must choose from [wildtrack, multiviewx]')
+
+    # Kaggle input datasets are read-only. Reuse gt.txt when supplied by the
+    # dataset; otherwise generate it under the writable output directory.
+    dataset_gt_fpath = os.path.join(data_path, 'gt.txt')
+    gt_fpath = dataset_gt_fpath if os.path.isfile(dataset_gt_fpath) else os.path.join(
+        output_root, 'cache', args.dataset, 'gt.txt'
+    )
     train_set = frameDataset(base, train=True, transform=train_trans, grid_reduce=4,
-                             drop_ratio=args.drop_ratio)
+                             drop_ratio=args.drop_ratio, force_download=False, gt_fpath=gt_fpath)
     test_set = frameDataset(base, train=False, transform=train_trans, grid_reduce=4,
-                            drop_ratio=args.drop_ratio)
+                            drop_ratio=args.drop_ratio, force_download=False, gt_fpath=gt_fpath)
     # test_set = frameDataset(base, train=False, transform=train_trans, grid_reduce=4, train_ratio=0.05)
 
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
@@ -116,7 +134,8 @@ def main(args):
     logdir = args.logdir
     if logdir is None:
         stamp = datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S')
-        base_log = f'logs/{args.dataset}_frame/{drop_tag}/{loss_tag}/{args.variant}'
+        base_log = os.path.join(output_root, 'logs', f'{args.dataset}_frame', drop_tag,
+                                loss_tag, args.variant)
         if args.loginfo:
             base_log = f'{base_log}/{args.loginfo}'
         logdir = f'{base_log}/{stamp}' if not args.resume else f'{base_log}/{args.resume}'
@@ -167,7 +186,7 @@ def main(args):
             # save
             torch.save(model.state_dict(), os.path.join(logdir, 'MultiviewDetector.pth'))
     else:
-        resume_dir = f'logs/{args.dataset}_frame/{drop_tag}/{loss_tag}/{args.variant}/' + args.resume
+        resume_dir = logdir
         resume_fname = resume_dir + '/MultiviewDetector.pth'
         model.load_state_dict(torch.load(resume_fname))
         model.eval()
@@ -185,6 +204,10 @@ if __name__ == '__main__':
                         choices=['default', 'per', 'img_proj', 'res_proj', 'no_joint_conv'])
     parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18'])
     parser.add_argument('-d', '--dataset', type=str, default='wildtrack', choices=['wildtrack', 'multiviewx'])
+    parser.add_argument('--data_root', type=str, default=None,
+                        help='root of the selected dataset; defaults to ../Data/<dataset>')
+    parser.add_argument('--output_root', type=str, default='.',
+                        help='writable root for logs, checkpoints, and generated GT cache')
     parser.add_argument('-j', '--num_workers', type=int, default=4)
     parser.add_argument('-b', '--batch_size', type=int, default=1, metavar='N',
                         help='input batch size for training (default: 1)')
