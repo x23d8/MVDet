@@ -31,6 +31,9 @@ def build_criterion(args):
             confuse_pred_thr=args.brl_confuse_thr,
             beta=args.brl_beta,
             mirror=not args.brl_no_mirror,
+            use_confuse=args.pseudo_mode != 'pseudo_only',
+            pseudo_thr=args.pseudo_thr,
+            lambda_pseudo=args.lambda_pseudo,
         ).cuda()
     return GaussianMSE().cuda()
 
@@ -52,16 +55,42 @@ def main(args):
     train_trans = T.Compose([T.Resize([720, 1280]), T.ToTensor(), normalize, ])
     
     if 'wildtrack' in args.dataset:
-        data_path = os.path.expanduser('../Data_temp/Wildtrack')
+        data_path = os.path.expanduser(args.data_path or '../Data/Wildtrack')
         base = Wildtrack(data_path)
     elif 'multiviewx' in args.dataset:
-        data_path = os.path.expanduser('../Data_temp/MultiviewX')
+        data_path = os.path.expanduser(args.data_path or '../Data/MultiviewX')
         base = MultiviewX(data_path)
     else:
         raise Exception('must choose from [wildtrack, multiviewx]')
 
-    train_set = frameDataset(base, train=True, transform=train_trans, grid_reduce=4, drop_ratio=args.drop_ratio)
-    test_set = frameDataset(base, train=False, transform=train_trans, grid_reduce=4, drop_ratio=args.drop_ratio)
+    gt_fpath = args.gt_fpath
+    if gt_fpath is None and args.data_path is not None:
+        gt_fpath = os.path.abspath(os.path.join('cache', f'{args.dataset}_gt.txt'))
+    if args.pseudo_mode != 'none':
+        if args.loss != 'brl':
+            raise ValueError('External pseudo labels require --loss brl')
+        if not args.pseudo_dir:
+            raise ValueError('--pseudo_dir is required when --pseudo_mode is enabled')
+
+    train_set = frameDataset(
+        base,
+        train=True,
+        transform=train_trans,
+        grid_reduce=4,
+        drop_ratio=args.drop_ratio,
+        pseudo_dir=args.pseudo_dir if args.pseudo_mode != 'none' else None,
+        gt_fpath=gt_fpath,
+    )
+    # Validation/test always uses complete annotations and no pseudo supervision.
+    test_set = frameDataset(
+        base,
+        train=False,
+        transform=train_trans,
+        grid_reduce=4,
+        drop_ratio=0,
+        force_download=False,
+        gt_fpath=gt_fpath,
+    )
 
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
                                                num_workers=args.num_workers, pin_memory=True)
@@ -79,6 +108,9 @@ def main(args):
         model = NoJointConvVariant(train_set, args.arch)
     else:
         raise Exception('no support for this variant')
+    if args.load is not None:
+        model.load_state_dict(torch.load(args.load))
+        print(f'{args.load} loaded')
 
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.lr, steps_per_epoch=len(train_loader),
@@ -90,13 +122,20 @@ def main(args):
     # logging
     drop_tag = f'drop_{args.drop_ratio}' if args.drop_ratio > 0 else 'full'
     if args.loss == 'brl':
-        loss_tag = f'brl_b{args.brl_beta}_c{args.brl_confuse_thr}'
+        loss_tag = f'brl_b{args.brl_pos_thr}_c{args.brl_confuse_thr}'
         if args.brl_no_mirror:
             loss_tag += '_nomirror'
+        if args.pseudo_mode != 'none':
+            loss_tag += f'_{args.pseudo_mode}_lp{args.lambda_pseudo}'
     else:
         loss_tag = 'mse'
-    logdir = f'logs/{args.dataset}_frame/{drop_tag}/{loss_tag}/{args.variant}/' + datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S') \
-        if not args.resume else f'logs/{args.dataset}_frame/{drop_tag}/{loss_tag}/{args.variant}/{args.resume}'
+    logdir = args.logdir
+    if logdir is None:
+        stamp = datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S')
+        base_log = f'logs/{args.dataset}_frame/{drop_tag}/{loss_tag}/{args.variant}'
+        if args.loginfo:
+            base_log = f'{base_log}/{args.loginfo}'
+        logdir = f'{base_log}/{stamp}' if not args.resume else f'{base_log}/{args.resume}'
     if args.resume is None:
         os.makedirs(logdir, exist_ok=True)
         copy_tree('./multiview_detector', logdir + '/scripts/multiview_detector')
@@ -120,15 +159,14 @@ def main(args):
 
     # learn
     if args.resume is None:
-        print('Testing...')
-        trainer.test(test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, True)
+        trainer.test(test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, False)
 
         for epoch in tqdm.tqdm(range(1, args.epochs + 1)):
             print('Training...')
             train_loss, train_prec = trainer.train(epoch, train_loader, optimizer, args.log_interval, scheduler)
             print('Testing...')
             test_loss, test_prec, moda = trainer.test(test_loader, os.path.join(logdir, 'test.txt'),
-                                                      train_set.gt_fpath, True)
+                                                      train_set.gt_fpath, False)
 
             x_epoch.append(epoch)
             train_loss_s.append(train_loss)
@@ -146,7 +184,7 @@ def main(args):
         model.load_state_dict(torch.load(resume_fname))
         model.eval()
     print('Test loaded model...')
-    trainer.test(test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, True)
+    trainer.test(test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, False)
 
 
 if __name__ == '__main__':
@@ -159,6 +197,10 @@ if __name__ == '__main__':
                         choices=['default', 'img_proj', 'res_proj', 'no_joint_conv'])
     parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18'])
     parser.add_argument('-d', '--dataset', type=str, default='wildtrack', choices=['wildtrack', 'multiviewx'])
+    parser.add_argument('--data_path', type=str, default=None,
+                        help='dataset root override; defaults to ../Data/<dataset>')
+    parser.add_argument('--gt_fpath', type=str, default=None,
+                        help='optional writable path for the complete evaluation GT cache')
     parser.add_argument('-j', '--num_workers', type=int, default=4)
     parser.add_argument('-b', '--batch_size', type=int, default=1, metavar='N',
                         help='input batch size for training (default: 1)')
@@ -171,6 +213,9 @@ if __name__ == '__main__':
     parser.add_argument('--resume', type=str, default=None)
     parser.add_argument('--visualize', action='store_true')
     parser.add_argument('--seed', type=int, default=1, help='random seed (default: None)')
+    parser.add_argument('--loginfo', type=str, default='')
+    parser.add_argument('--logdir', type=str, default=None)
+    parser.add_argument('--load', type=str, default=None)
     
     # Dropped annotations
     parser.add_argument('--drop_ratio', type=int, default=0,
@@ -187,6 +232,15 @@ if __name__ == '__main__':
                         help='weight / strength of confuse term')
     parser.add_argument('--brl_no_mirror', action='store_true',
                         help='if set, down-weight bg MSE on confuse instead of mirroring toward 1')
+    parser.add_argument('--pseudo_mode', type=str, default='none',
+                        choices=['none', 'pseudo_only', 'pseudo_confuse'],
+                        help='pseudo_only disables self-confuse; pseudo_confuse keeps both')
+    parser.add_argument('--pseudo_dir', type=str, default=None,
+                        help='directory containing per-frame BEV pseudo-label JSON files')
+    parser.add_argument('--pseudo_thr', type=float, default=0.1,
+                        help='Gaussian pseudo heatmap threshold used to define pseudo-positive pixels')
+    parser.add_argument('--lambda_pseudo', type=float, default=0.1,
+                        help='weight of the separately normalized pseudo-label loss')
     args = parser.parse_args()
 
     main(args)

@@ -11,6 +11,16 @@ from multiview_detector.utils.meters import AverageMeter
 from multiview_detector.utils.image_utils import add_heatmap_to_image
 
 
+def _unpack_frame_batch(batch):
+    if len(batch) == 4:
+        data, map_gt, imgs_gt, frame = batch
+        return data, map_gt, imgs_gt, None, None, frame
+    if len(batch) == 6:
+        data, map_gt, imgs_gt, map_pseudo, pseudo_conf, frame = batch
+        return data, map_gt, imgs_gt, map_pseudo, pseudo_conf, frame
+    raise ValueError(f'Unexpected frameDataset batch with {len(batch)} elements')
+
+
 class BaseTrainer(object):
     def __init__(self):
         super(BaseTrainer, self).__init__()
@@ -36,12 +46,20 @@ class DPerspectiveTrainer(BaseTrainer):
         t_b = time.time()
         t_forward = 0
         t_backward = 0
-        for batch_idx, (data, map_gt, imgs_gt, _) in enumerate(data_loader):
+        for batch_idx, batch in enumerate(data_loader):
+            data, map_gt, imgs_gt, map_pseudo, pseudo_conf, _ = _unpack_frame_batch(batch)
             optimizer.zero_grad()
             imgs_gt = torch.cat(imgs_gt,dim=0).cuda()
             map_gt = map_gt.cuda()
             alpha = len(imgs_gt) * self.alpha
-            loss, map_res = self.model(data, imgs_gt, map_gt, alpha)
+            loss, map_res = self.model(
+                data,
+                imgs_gt,
+                map_gt,
+                alpha,
+                pseudo_target=None if map_pseudo is None else map_pseudo.cuda(),
+                pseudo_conf=None if pseudo_conf is None else pseudo_conf.cuda(),
+            )
             t_f = time.time()
             t_forward += t_f - t_b
             loss.backward()
@@ -91,7 +109,8 @@ class DPerspectiveTrainer(BaseTrainer):
         t0 = time.time()
         if res_fpath is not None:
             assert gt_fpath is not None
-        for batch_idx, (data, map_gt, imgs_gt, frame) in enumerate(data_loader):
+        for batch_idx, batch in enumerate(data_loader):
+            data, map_gt, imgs_gt, _, _, frame = _unpack_frame_batch(batch)
             with torch.no_grad():
                 map_res, imgs_res = self.model(data)
             if res_fpath is not None:

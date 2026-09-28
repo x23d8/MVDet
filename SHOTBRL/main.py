@@ -33,6 +33,9 @@ def build_criterion(args):
             confuse_pred_thr=args.brl_confuse_thr,
             beta=args.brl_beta,
             mirror=not args.brl_no_mirror,
+            use_confuse=args.pseudo_mode != 'pseudo_only',
+            pseudo_thr=args.pseudo_thr,
+            lambda_pseudo=args.lambda_pseudo,
         ).cuda()
     if args.loss == 'brl_v2':
         return BRLGaussianMSEv2(
@@ -59,17 +62,33 @@ def main(args):
     denormalize = img_color_denormalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
     train_trans = T.Compose([T.Resize([720, 1280]), T.ToTensor(), normalize, ])
     if 'wildtrack' in args.dataset:
-        data_path = os.path.expanduser('../Data/Wildtrack')
+        data_path = os.path.expanduser(args.data_path or '../Data/Wildtrack')
         base = Wildtrack(data_path)
     elif 'multiviewx' in args.dataset:
-        data_path = os.path.expanduser('../Data/MultiviewX')
+        data_path = os.path.expanduser(args.data_path or '../Data/MultiviewX')
         base = MultiviewX(data_path)
     else:
         raise Exception('must choose from [wildtrack, multiviewx]')
-    train_set = frameDataset(base, train=True, transform=train_trans, grid_reduce=4,
-                             drop_ratio=args.drop_ratio)
+    gt_fpath = args.gt_fpath
+    if gt_fpath is None and args.data_path is not None:
+        gt_fpath = os.path.abspath(os.path.join('cache', f'{args.dataset}_gt.txt'))
+    if args.pseudo_mode != 'none':
+        if args.loss != 'brl':
+            raise ValueError('External pseudo labels currently require --loss brl')
+        if not args.pseudo_dir:
+            raise ValueError('--pseudo_dir is required when --pseudo_mode is enabled')
+    train_set = frameDataset(
+        base,
+        train=True,
+        transform=train_trans,
+        grid_reduce=4,
+        drop_ratio=args.drop_ratio,
+        pseudo_dir=args.pseudo_dir if args.pseudo_mode != 'none' else None,
+        gt_fpath=gt_fpath,
+    )
+    # Evaluation must always use the complete held-out annotations and never pseudo labels.
     test_set = frameDataset(base, train=False, transform=train_trans, grid_reduce=4,
-                            drop_ratio=args.drop_ratio)
+                            drop_ratio=0, force_download=False, gt_fpath=gt_fpath)
     # test_set = frameDataset(base, train=False, transform=train_trans, grid_reduce=4, train_ratio=0.05)
 
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
@@ -107,6 +126,8 @@ def main(args):
         loss_tag = f'brl_b{args.brl_pos_thr}_c{args.brl_confuse_thr}'
         if args.brl_no_mirror:
             loss_tag += '_nomirror'
+        if args.pseudo_mode != 'none':
+            loss_tag += f'_{args.pseudo_mode}_lp{args.lambda_pseudo}'
     elif args.loss == 'brl_v2':
         loss_tag = f'brl_v2_b{args.brl_beta}_c{args.brl_confuse_thr}'
         if args.brl_no_mirror:
@@ -185,6 +206,10 @@ if __name__ == '__main__':
                         choices=['default', 'per', 'img_proj', 'res_proj', 'no_joint_conv'])
     parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18'])
     parser.add_argument('-d', '--dataset', type=str, default='wildtrack', choices=['wildtrack', 'multiviewx'])
+    parser.add_argument('--data_path', type=str, default=None,
+                        help='dataset root override; defaults to ../Data/<dataset>')
+    parser.add_argument('--gt_fpath', type=str, default=None,
+                        help='optional writable cache path for the complete evaluation GT file')
     parser.add_argument('-j', '--num_workers', type=int, default=4)
     parser.add_argument('-b', '--batch_size', type=int, default=1, metavar='N',
                         help='input batch size for training (default: 1)')
@@ -218,6 +243,16 @@ if __name__ == '__main__':
                         help='weight / strength of confuse term')
     parser.add_argument('--brl_no_mirror', action='store_true',
                         help='if set, down-weight bg MSE on confuse instead of mirroring toward 1')
+    # External YOLO-pose pseudo-label supervision.
+    parser.add_argument('--pseudo_mode', type=str, default='none',
+                        choices=['none', 'pseudo_only', 'pseudo_confuse'],
+                        help='pseudo_only disables self-confuse; pseudo_confuse keeps both')
+    parser.add_argument('--pseudo_dir', type=str, default=None,
+                        help='directory containing per-frame BEV pseudo-label JSON files')
+    parser.add_argument('--pseudo_thr', type=float, default=0.1,
+                        help='Gaussian pseudo heatmap threshold used to create the pseudo region')
+    parser.add_argument('--lambda_pseudo', type=float, default=0.1,
+                        help='weight of the separately normalized external pseudo-label loss')
     args = parser.parse_args()
 
     main(args)

@@ -12,6 +12,16 @@ from multiview_detector.utils.meters import AverageMeter
 from multiview_detector.utils.image_utils import add_heatmap_to_image
 
 
+def _unpack_frame_batch(batch):
+    if len(batch) == 4:
+        data, map_gt, imgs_gt, frame = batch
+        return data, map_gt, imgs_gt, None, None, frame
+    if len(batch) == 6:
+        data, map_gt, imgs_gt, map_pseudo, pseudo_conf, frame = batch
+        return data, map_gt, imgs_gt, map_pseudo, pseudo_conf, frame
+    raise ValueError(f'Unexpected frameDataset batch with {len(batch)} elements')
+
+
 class BaseTrainer(object):
     def __init__(self):
         super(BaseTrainer, self).__init__()
@@ -35,7 +45,8 @@ class PerspectiveTrainer(BaseTrainer):
         t_b = time.time()
         t_forward = 0
         t_backward = 0
-        for batch_idx, (data, map_gt, imgs_gt, _) in enumerate(data_loader):
+        for batch_idx, batch in enumerate(data_loader):
+            data, map_gt, imgs_gt, map_pseudo, pseudo_conf, _ = _unpack_frame_batch(batch)
             optimizer.zero_grad()
             map_res, imgs_res = self.model(data)
             t_f = time.time()
@@ -43,8 +54,19 @@ class PerspectiveTrainer(BaseTrainer):
             loss = 0
             for img_res, img_gt in zip(imgs_res, imgs_gt):
                 loss += self.criterion(img_res, img_gt.to(img_res.device), data_loader.dataset.img_kernel)
-            loss = self.criterion(map_res, map_gt.to(map_res.device), data_loader.dataset.map_kernel) + \
-                   loss / len(imgs_gt) * self.alpha
+            if map_pseudo is None:
+                map_loss = self.criterion(
+                    map_res, map_gt.to(map_res.device), data_loader.dataset.map_kernel
+                )
+            else:
+                map_loss = self.criterion(
+                    map_res,
+                    map_gt.to(map_res.device),
+                    data_loader.dataset.map_kernel,
+                    pseudo_target=map_pseudo.to(map_res.device),
+                    pseudo_conf=pseudo_conf.to(map_res.device),
+                )
+            loss = map_loss + loss / len(imgs_gt) * self.alpha
             loss.backward()
             optimizer.step()
             losses += loss.item()
@@ -91,7 +113,8 @@ class PerspectiveTrainer(BaseTrainer):
         t0 = time.time()
         if res_fpath is not None:
             assert gt_fpath is not None
-        for batch_idx, (data, map_gt, imgs_gt, frame) in enumerate(data_loader):
+        for batch_idx, batch in enumerate(data_loader):
+            data, map_gt, imgs_gt, _, _, frame = _unpack_frame_batch(batch)
             with torch.no_grad():
                 map_res, imgs_res = self.model(data)
             if res_fpath is not None:

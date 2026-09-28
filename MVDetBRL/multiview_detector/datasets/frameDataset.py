@@ -12,7 +12,7 @@ from multiview_detector.utils.projection import *
 class frameDataset(VisionDataset):
     def __init__(self, base, train=True, transform=ToTensor(), target_transform=ToTensor(),
                  reID=False, grid_reduce=4, img_reduce=4, train_ratio=0.9, force_download=True,
-                 drop_ratio=0):
+                 drop_ratio=0, pseudo_dir=None, gt_fpath=None):
         super().__init__(base.root, transform=transform, target_transform=target_transform)
 
         map_sigma, map_kernel_size = 20 / grid_reduce, 20
@@ -23,6 +23,7 @@ class frameDataset(VisionDataset):
         self.root, self.num_cam, self.num_frame = base.root, base.num_cam, base.num_frame
         self.img_shape, self.worldgrid_shape = base.img_shape, base.worldgrid_shape  # H,W; N_row,N_col
         self.reducedgrid_shape = list(map(lambda x: int(x / self.grid_reduce), self.worldgrid_shape))
+        self.pseudo_dir = os.path.abspath(os.path.expanduser(pseudo_dir)) if pseudo_dir else None
 
         # Images/calib stay under base.root; labels can come from a drop_* folder.
         if drop_ratio > 0:
@@ -44,8 +45,15 @@ class frameDataset(VisionDataset):
         self.map_gt = {}
         self.imgs_head_foot_gt = {}
         self.download(frame_range)
+        self.map_pseudo = {}
+        self.map_pseudo_conf = {}
+        if self.pseudo_dir is not None:
+            if not os.path.isdir(self.pseudo_dir):
+                raise FileNotFoundError(f'Pseudo-label directory not found: {self.pseudo_dir}')
+            self.load_pseudo_labels()
 
-        self.gt_fpath = os.path.join(self.root, 'gt.txt')
+        self.gt_fpath = (os.path.abspath(os.path.expanduser(gt_fpath))
+                         if gt_fpath else os.path.join(self.root, 'gt.txt'))
         if not os.path.exists(self.gt_fpath) or force_download:
             self.prepare_gt()
 
@@ -68,6 +76,35 @@ class frameDataset(VisionDataset):
         self.img_kernel[0, 0] = torch.from_numpy(img_kernel)
         self.img_kernel[1, 1] = torch.from_numpy(img_kernel)
         pass
+
+    def load_pseudo_labels(self):
+        """Load confidence-weighted BEV points from one JSON file per frame."""
+        for frame in self.map_gt:
+            pseudo_map = np.zeros(self.reducedgrid_shape, dtype=np.float32)
+            confidence_map = np.zeros(self.reducedgrid_shape, dtype=np.float32)
+            candidates = [
+                os.path.join(self.pseudo_dir, f'{frame:08d}.json'),
+                os.path.join(self.pseudo_dir, f'{frame}.json'),
+            ]
+            pseudo_path = next((path for path in candidates if os.path.isfile(path)), None)
+            if pseudo_path is not None:
+                with open(pseudo_path, 'r', encoding='utf-8') as handle:
+                    payload = json.load(handle)
+                for point in payload.get('points', []):
+                    grid_x = float(point['grid_x'])
+                    grid_y = float(point['grid_y'])
+                    confidence = float(np.clip(point.get('confidence', 1.0), 0.0, 1.0))
+                    if self.base.indexing == 'xy':
+                        row = int(grid_y / self.grid_reduce)
+                        col = int(grid_x / self.grid_reduce)
+                    else:
+                        row = int(grid_x / self.grid_reduce)
+                        col = int(grid_y / self.grid_reduce)
+                    if 0 <= row < self.reducedgrid_shape[0] and 0 <= col < self.reducedgrid_shape[1]:
+                        pseudo_map[row, col] = 1.0
+                        confidence_map[row, col] = max(confidence_map[row, col], confidence)
+            self.map_pseudo[frame] = pseudo_map
+            self.map_pseudo_conf[frame] = confidence_map
 
     def prepare_gt(self):
         og_gt = []
@@ -160,6 +197,14 @@ class frameDataset(VisionDataset):
             if self.target_transform is not None:
                 img_gt = self.target_transform(img_gt)
             imgs_gt.append(img_gt.float())
+        if self.pseudo_dir is not None:
+            map_pseudo = self.map_pseudo[frame]
+            map_pseudo_conf = self.map_pseudo_conf[frame]
+            if self.target_transform is not None:
+                map_pseudo = self.target_transform(map_pseudo)
+                map_pseudo_conf = self.target_transform(map_pseudo_conf)
+            return (imgs, map_gt.float(), imgs_gt, map_pseudo.float(),
+                    map_pseudo_conf.float(), frame)
         return imgs, map_gt.float(), imgs_gt, frame
 
     def __len__(self):

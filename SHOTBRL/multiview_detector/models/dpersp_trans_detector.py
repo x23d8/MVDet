@@ -125,7 +125,8 @@ class DPerspTransDetector(nn.Module):
             warped_feat += self.feat_before_merge[f'{i}'](out_feat) # [b*n,c,h,w]
         return warped_feat
 
-    def forward(self, imgs, imgs_gt=None, map_gt=None, alpha=0, visualize=False):
+    def forward(self, imgs, imgs_gt=None, map_gt=None, alpha=0,
+                pseudo_target=None, pseudo_conf=None, visualize=False):
         # implemented assuming B=1
         B, N, C, H, W = imgs.shape
         img_feature_all = self.base_pt1(imgs.view([-1,C,H,W]).to('cuda:0'))
@@ -141,8 +142,21 @@ class DPerspTransDetector(nn.Module):
         # Train with external criterion (GaussianMSE / BRL / BRL v2): hard GT + kernel inside loss.
         # DPerspectiveTrainer sets self.criterion; do NOT use nn.MSELoss here or BRL is ignored.
         if self.criterion is not None:
-            loss = self.criterion(map_result, map_gt.to(map_result.device), self.map_kernel) + \
-                   alpha * self.criterion(imgs_result, imgs_gt.to(imgs_result.device), self.img_kernel)
+            if pseudo_target is None:
+                map_loss = self.criterion(
+                    map_result, map_gt.to(map_result.device), self.map_kernel
+                )
+            else:
+                map_loss = self.criterion(
+                    map_result,
+                    map_gt.to(map_result.device),
+                    self.map_kernel,
+                    pseudo_target=pseudo_target.to(map_result.device),
+                    pseudo_conf=pseudo_conf.to(map_result.device),
+                )
+            loss = map_loss + alpha * self.criterion(
+                imgs_result, imgs_gt.to(imgs_result.device), self.img_kernel
+            )
             return loss, map_result
         with torch.no_grad():
             imgs_gt = self.trans_img(imgs_gt).to('cuda:0')

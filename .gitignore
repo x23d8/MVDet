@@ -2,6 +2,10 @@
 # training outputs
 **/logs/
 **/*.pth
+**/*.pt
+**/artifacts/
+**/Ultralytics/
+**/pseudo_labels/
 
 # python
 **/__pycache__/
