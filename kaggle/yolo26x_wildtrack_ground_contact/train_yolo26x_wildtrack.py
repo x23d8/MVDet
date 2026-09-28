@@ -21,15 +21,43 @@ import numpy as np
 import torch
 
 
-INPUT_ROOT = Path("/kaggle/input/thesis-dataset-new")
-DATA_ROOT = Path("/kaggle/temp/wildtrack_ground_contact")
-OUTPUT_ROOT = Path("/kaggle/working")
+INPUT_ROOT = Path(os.environ.get("INPUT_ROOT", "/kaggle/input/thesis-dataset-new"))
+WILDTRACK_ROOT = Path(
+    os.environ.get(
+        "WILDTRACK_ROOT",
+        "/kaggle/input/thesis-dataset-new/Wildtrack/Wildtrack",
+    )
+)
+DATA_ROOT = Path(os.environ.get("DATA_ROOT", "/kaggle/temp/wildtrack_ground_contact"))
+OUTPUT_ROOT = Path(os.environ.get("OUTPUT_ROOT", "/kaggle/working"))
 RUNS_ROOT = OUTPUT_ROOT / "runs"
 MODEL_NAME = os.environ.get("MODEL_NAME", "yolo26x-pose.pt")
 EPOCHS = int(os.environ.get("EPOCHS", "30"))
 IMAGE_SIZE = int(os.environ.get("IMAGE_SIZE", "960"))
 VAL_FRACTION = float(os.environ.get("VAL_FRACTION", "0.20"))
 SEED = int(os.environ.get("SEED", "42"))
+DEVICE = os.environ.get("DEVICE", "auto")
+BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "0"))
+WORKERS = int(os.environ.get("WORKERS", "4"))
+OPTIMIZER = os.environ.get("OPTIMIZER", "AdamW")
+LR0 = float(os.environ.get("LR0", "0.001"))
+PATIENCE = int(os.environ.get("PATIENCE", "8"))
+FREEZE = int(os.environ.get("FREEZE", "10"))
+CLOSE_MOSAIC = int(os.environ.get("CLOSE_MOSAIC", "5"))
+PREDICT_CONF = float(os.environ.get("PREDICT_CONF", "0.25"))
+
+
+def env_flag(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+COS_LR = env_flag("COS_LR", True)
+AMP = env_flag("AMP", True)
+CACHE = env_flag("CACHE", False)
+DETERMINISTIC = env_flag("DETERMINISTIC", True)
 
 INTRINSIC_FILES = [
     "intr_CVLab1.xml",
@@ -52,19 +80,30 @@ EXTRINSIC_FILES = [
 
 
 def find_wildtrack_root() -> Path:
-    candidates = []
-    for annotation_dir in INPUT_ROOT.rglob("annotations_positions"):
-        root = annotation_dir.parent
+    def is_complete(root: Path) -> bool:
         required = [
+            root / "annotations_positions",
             root / "Image_subsets" / "C1",
             root / "Image_subsets" / "C7",
             root / "calibrations" / "intrinsic_zero",
             root / "calibrations" / "extrinsic",
         ]
-        if all(path.is_dir() for path in required):
+        return all(path.is_dir() for path in required)
+
+    if is_complete(WILDTRACK_ROOT):
+        print(f"Wildtrack root: {WILDTRACK_ROOT}", flush=True)
+        return WILDTRACK_ROOT
+
+    candidates = []
+    for annotation_dir in INPUT_ROOT.rglob("annotations_positions"):
+        root = annotation_dir.parent
+        if is_complete(root):
             candidates.append(root)
     if not candidates:
-        raise FileNotFoundError(f"Could not find a Wildtrack root below {INPUT_ROOT}")
+        raise FileNotFoundError(
+            f"Wildtrack is incomplete. Checked explicit root {WILDTRACK_ROOT} "
+            f"and scanned below {INPUT_ROOT}"
+        )
     candidates.sort(key=lambda path: ("wildtrack" not in str(path).lower(), len(path.parts)))
     print("Wildtrack root candidates:", [str(path) for path in candidates])
     return candidates[0]
@@ -270,8 +309,8 @@ def main() -> None:
 
     gpu_count = torch.cuda.device_count()
     gpu_names = [torch.cuda.get_device_name(index) for index in range(gpu_count)]
-    device = ",".join(str(index) for index in range(gpu_count))
-    batch = gpu_count
+    device = ",".join(str(index) for index in range(gpu_count)) if DEVICE == "auto" else DEVICE
+    batch = gpu_count if BATCH_SIZE <= 0 else BATCH_SIZE
     print("GPU devices:", gpu_names)
     print(f"Ultralytics={ultralytics.__version__}, device={device}, global_batch={batch}")
 
@@ -284,6 +323,9 @@ def main() -> None:
         "batch": batch,
         "device": device,
         "seed": SEED,
+        "workers": WORKERS,
+        "optimizer": OPTIMIZER,
+        "lr0": LR0,
         "gpus": gpu_names,
         "ultralytics": ultralytics.__version__,
         "dataset": data_stats,
@@ -300,22 +342,22 @@ def main() -> None:
         imgsz=IMAGE_SIZE,
         batch=batch,
         device=device,
-        workers=4,
+        workers=WORKERS,
         project=str(RUNS_ROOT),
         name="yolo26x_wildtrack_ground_contact",
         exist_ok=True,
         pretrained=True,
-        optimizer="AdamW",
-        lr0=1e-3,
-        cos_lr=True,
-        patience=8,
-        amp=True,
-        cache=False,
-        freeze=10,
-        close_mosaic=5,
+        optimizer=OPTIMIZER,
+        lr0=LR0,
+        cos_lr=COS_LR,
+        patience=PATIENCE,
+        amp=AMP,
+        cache=CACHE,
+        freeze=FREEZE,
+        close_mosaic=CLOSE_MOSAIC,
         plots=True,
         seed=SEED,
-        deterministic=True,
+        deterministic=DETERMINISTIC,
         verbose=True,
     )
 
@@ -331,7 +373,7 @@ def main() -> None:
     best_model.predict(
         source=[str(path) for path in validation_images],
         imgsz=IMAGE_SIZE,
-        conf=0.25,
+        conf=PREDICT_CONF,
         device=0,
         save=True,
         project=str(OUTPUT_ROOT),

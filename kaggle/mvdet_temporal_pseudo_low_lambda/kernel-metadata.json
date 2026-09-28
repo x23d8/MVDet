@@ -1,9 +1,9 @@
 {
   "id": "lee735/mvdet-temporal-pseudo-low-lambda-grid",
   "title": "MVDet Temporal Pseudo Low Lambda Grid",
-  "code_file": "train_mvdet_temporal_pseudo.py",
+  "code_file": "mvdet_temporal_pseudo_low_lambda.ipynb",
   "language": "python",
-  "kernel_type": "script",
+  "kernel_type": "notebook",
   "is_private": true,
   "enable_gpu": true,
   "enable_tpu": false,
@@ -11,8 +11,7 @@
   "machine_shape": "NvidiaTeslaT4",
   "keywords": [],
   "dataset_sources": [
-    "lee735/thesis-dataset-new",
-    "lee735/mvdetbrl-temporal-pseudo-code"
+    "lee735/thesis-dataset-new"
   ],
   "competition_sources": [],
   "kernel_sources": []

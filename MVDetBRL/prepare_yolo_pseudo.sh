@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ensure YOLO-pose weights and the complete offline BEV pseudo-label set exist.
+# Ensure YOLO detection weights and the complete offline BEV pseudo-label set exist.
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -19,19 +19,18 @@ AUTO_PREPARE_PSEUDO="${AUTO_PREPARE_PSEUDO:-1}"
 FORCE_REGENERATE_PSEUDO="${FORCE_REGENERATE_PSEUDO:-0}"
 
 YOLO_TOOL="${YOLO_TOOL:-../SHOTBRL/tools/generate_yolo_pose_bev_pseudo.py}"
-YOLO_MODEL="${YOLO_MODEL:-./yolo26m-pose.pt}"
+YOLO_MODEL="${YOLO_MODEL:-./yolo26x.pt}"
 YOLO_IMGSZ="${YOLO_IMGSZ:-1280}"
 YOLO_DEVICE="${YOLO_DEVICE:-0}"
-YOLO_CONF="${YOLO_CONF:-0.25}"
-YOLO_KPT_CONF="${YOLO_KPT_CONF:-0.35}"
-YOLO_CANDIDATE_CONF="${YOLO_CANDIDATE_CONF:-0.15}"
-YOLO_FOOT_ANCHOR="${YOLO_FOOT_ANCHOR:-pose_x_bbox_y}"
+YOLO_CONF="${YOLO_CONF:-0.20}"
+YOLO_CANDIDATE_CONF="${YOLO_CANDIDATE_CONF:-0.20}"
+YOLO_FOOT_ANCHOR="${YOLO_FOOT_ANCHOR:-bbox_bottom}"
 YOLO_MIN_VIEWS="${YOLO_MIN_VIEWS:-2}"
 YOLO_MERGE_RADIUS_M="${YOLO_MERGE_RADIUS_M:-0.60}"
 YOLO_TEMPORAL_SINGLETONS="${YOLO_TEMPORAL_SINGLETONS:-1}"
 YOLO_TEMPORAL_CONF="${YOLO_TEMPORAL_CONF:-0.65}"
 YOLO_TEMPORAL_RADIUS_M="${YOLO_TEMPORAL_RADIUS_M:-0.60}"
-YOLO_INFERENCE_BATCH="${YOLO_INFERENCE_BATCH:-4}"
+YOLO_INFERENCE_BATCH="${YOLO_INFERENCE_BATCH:-1}"
 
 fail() {
   echo "Configuration error: $*" >&2
@@ -65,7 +64,6 @@ require_positive_int YOLO_IMGSZ "$YOLO_IMGSZ"
 require_positive_int YOLO_MIN_VIEWS "$YOLO_MIN_VIEWS"
 require_positive_int YOLO_INFERENCE_BATCH "$YOLO_INFERENCE_BATCH"
 require_probability YOLO_CONF "$YOLO_CONF"
-require_probability YOLO_KPT_CONF "$YOLO_KPT_CONF"
 require_probability YOLO_CANDIDATE_CONF "$YOLO_CANDIDATE_CONF"
 require_probability YOLO_TEMPORAL_CONF "$YOLO_TEMPORAL_CONF"
 "$PYTHON_BIN" -c 'import sys; x=float(sys.argv[1]); raise SystemExit(0 if x > 0.0 else 1)' "$YOLO_MERGE_RADIUS_M" \
@@ -76,8 +74,8 @@ require_probability YOLO_TEMPORAL_CONF "$YOLO_TEMPORAL_CONF"
 [[ "$FORCE_REGENERATE_PSEUDO" =~ ^[01]$ ]] || fail "FORCE_REGENERATE_PSEUDO must be 0 or 1"
 [[ "$YOLO_TEMPORAL_SINGLETONS" =~ ^[01]$ ]] || fail "YOLO_TEMPORAL_SINGLETONS must be 0 or 1"
 case "$YOLO_FOOT_ANCHOR" in
-  pose|bbox_bottom|pose_x_bbox_y) ;;
-  *) fail "YOLO_FOOT_ANCHOR must be pose, bbox_bottom, or pose_x_bbox_y" ;;
+  bbox_bottom) ;;
+  *) fail "detection-only YOLO requires YOLO_FOOT_ANCHOR=bbox_bottom" ;;
 esac
 case "$DATASET" in
   wildtrack) NUM_CAMERAS=7 ;;
@@ -116,7 +114,6 @@ generator=(
   --model "$YOLO_MODEL"
   --imgsz "$YOLO_IMGSZ"
   --conf "$YOLO_CONF"
-  --kpt-conf "$YOLO_KPT_CONF"
   --candidate-conf "$YOLO_CANDIDATE_CONF"
   --foot-anchor "$YOLO_FOOT_ANCHOR"
   --min-views "$YOLO_MIN_VIEWS"

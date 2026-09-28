@@ -1,9 +1,9 @@
 {
   "id": "lee735/yolo26x-wildtrack-ground-contact",
   "title": "YOLO26x Wildtrack Ground Contact",
-  "code_file": "train_yolo26x_wildtrack.py",
+  "code_file": "yolo26x_wildtrack_ground_contact.ipynb",
   "language": "python",
-  "kernel_type": "script",
+  "kernel_type": "notebook",
   "is_private": true,
   "enable_gpu": true,
   "enable_tpu": false,

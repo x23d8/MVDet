@@ -1,4 +1,4 @@
-"""Generate confidence-weighted BEV pseudo labels from multi-view YOLO pose feet.
+"""Generate confidence-weighted BEV pseudo labels from YOLO box-bottom feet.
 
 Run this offline before MVDet training.  The training loader consumes the JSON
 files written here; YOLO is deliberately not executed inside each epoch.
@@ -22,24 +22,44 @@ if str(PROJECT_DIR) not in sys.path:
 from multiview_detector.datasets.MultiviewX import MultiviewX
 from multiview_detector.datasets.Wildtrack import Wildtrack
 from multiview_detector.utils.projection import get_worldcoord_from_imagecoord
-from yolo_pose_foot_demo import extract_predictions
+
+
+def extract_bbox_predictions(result):
+    """Convert person detections to TrackTacular-style bottom-center feet."""
+    if result.boxes is None:
+        return []
+    boxes = result.boxes.xyxy.detach().cpu().numpy()
+    scores = result.boxes.conf.detach().cpu().numpy()
+    predictions = []
+    for box, score in zip(boxes, scores):
+        foot = np.asarray([(box[0] + box[2]) * 0.5, box[3]], dtype=np.float32)
+        predictions.append(
+            {
+                "box": box.astype(np.float32),
+                "box_conf": float(score),
+                "foot": foot,
+                "foot_conf": 1.0,
+                "confidence": float(score),
+                "source": "bbox_bottom",
+            }
+        )
+    return predictions
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Generate YOLO-pose BEV pseudo labels")
+    parser = argparse.ArgumentParser(description="Generate YOLO box-bottom BEV pseudo labels")
     parser.add_argument("--dataset", choices=["wildtrack", "multiviewx"], required=True)
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--model", default="yolo26m-pose.pt")
+    parser.add_argument("--model", default="yolo26x.pt")
     parser.add_argument("--imgsz", type=int, default=1280)
     parser.add_argument("--conf", type=float, default=0.25)
-    parser.add_argument("--kpt-conf", type=float, default=0.35)
-    parser.add_argument("--candidate-conf", type=float, default=0.15)
+    parser.add_argument("--candidate-conf", type=float, default=0.20)
     parser.add_argument(
         "--foot-anchor",
-        choices=["pose", "bbox_bottom", "pose_x_bbox_y"],
-        default="pose_x_bbox_y",
-        help="image point projected to the ground plane",
+        choices=["bbox_bottom"],
+        default="bbox_bottom",
+        help="detection box point projected to the ground plane",
     )
     parser.add_argument("--min-views", type=int, default=2)
     parser.add_argument("--merge-radius-m", type=float, default=0.60)
@@ -75,13 +95,7 @@ def meters_to_world_units(dataset_name, world_coord_m):
 
 def project_candidate(base, dataset_name, camera_index, prediction, foot_anchor):
     box = np.asarray(prediction["box"], dtype=np.float64)
-    pose_foot = np.asarray(prediction["foot"], dtype=np.float64)
-    if foot_anchor == "bbox_bottom":
-        selected_foot = np.asarray([(box[0] + box[2]) / 2.0, box[3]], dtype=np.float64)
-    elif foot_anchor == "pose_x_bbox_y":
-        selected_foot = np.asarray([pose_foot[0], box[3]], dtype=np.float64)
-    else:
-        selected_foot = pose_foot
+    selected_foot = np.asarray([(box[0] + box[2]) / 2.0, box[3]], dtype=np.float64)
     image_coord = selected_foot.reshape(2, 1)
     world_coord = get_worldcoord_from_imagecoord(
         image_coord,
@@ -348,12 +362,13 @@ def main():
                 source=[image_paths[camera][frame] for camera in cameras],
                 imgsz=args.imgsz,
                 conf=args.conf,
+                classes=[0],
                 device=args.device,
                 verbose=False,
                 save=False,
             )
             for camera, result in zip(cameras, results):
-                predictions = extract_predictions(result, args.kpt_conf)
+                predictions = extract_bbox_predictions(result)
                 accepted = 0
                 for prediction in predictions:
                     if prediction["confidence"] < args.candidate_conf:

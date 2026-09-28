@@ -6,7 +6,7 @@
 **/artifacts/
 **/Ultralytics/
 **/pseudo_labels/
-
+output
 # python
 **/__pycache__/
 **/*.py[cod]
