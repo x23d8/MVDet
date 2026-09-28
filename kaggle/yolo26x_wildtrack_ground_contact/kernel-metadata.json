@@ -1,0 +1,20 @@
+{
+  "id": "lee735/yolo26x-wildtrack-ground-contact",
+  "title": "YOLO26x Wildtrack Ground Contact",
+  "code_file": "train_yolo26x_wildtrack.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_tpu": false,
+  "enable_internet": true,
+  "machine_shape": "NvidiaTeslaT4",
+  "keywords": [
+    "gpu"
+  ],
+  "dataset_sources": [
+    "lee735/thesis-dataset-new"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

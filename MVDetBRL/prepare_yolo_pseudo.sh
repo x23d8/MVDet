@@ -6,6 +6,7 @@ cd "$(dirname "$0")"
 
 # Ultralytics appends its own subdirectory; point the base at the writable project.
 export YOLO_CONFIG_DIR="${YOLO_CONFIG_DIR:-$PWD}"
+export PYTHONUNBUFFERED="${PYTHONUNBUFFERED:-1}"
 mkdir -p "$YOLO_CONFIG_DIR"
 
 DATASET="${DATASET:-wildtrack}"
@@ -26,7 +27,10 @@ YOLO_KPT_CONF="${YOLO_KPT_CONF:-0.35}"
 YOLO_CANDIDATE_CONF="${YOLO_CANDIDATE_CONF:-0.15}"
 YOLO_FOOT_ANCHOR="${YOLO_FOOT_ANCHOR:-pose_x_bbox_y}"
 YOLO_MIN_VIEWS="${YOLO_MIN_VIEWS:-2}"
-YOLO_MERGE_RADIUS_M="${YOLO_MERGE_RADIUS_M:-0.75}"
+YOLO_MERGE_RADIUS_M="${YOLO_MERGE_RADIUS_M:-0.60}"
+YOLO_TEMPORAL_SINGLETONS="${YOLO_TEMPORAL_SINGLETONS:-1}"
+YOLO_TEMPORAL_CONF="${YOLO_TEMPORAL_CONF:-0.65}"
+YOLO_TEMPORAL_RADIUS_M="${YOLO_TEMPORAL_RADIUS_M:-0.60}"
 YOLO_INFERENCE_BATCH="${YOLO_INFERENCE_BATCH:-4}"
 
 fail() {
@@ -63,10 +67,14 @@ require_positive_int YOLO_INFERENCE_BATCH "$YOLO_INFERENCE_BATCH"
 require_probability YOLO_CONF "$YOLO_CONF"
 require_probability YOLO_KPT_CONF "$YOLO_KPT_CONF"
 require_probability YOLO_CANDIDATE_CONF "$YOLO_CANDIDATE_CONF"
+require_probability YOLO_TEMPORAL_CONF "$YOLO_TEMPORAL_CONF"
 "$PYTHON_BIN" -c 'import sys; x=float(sys.argv[1]); raise SystemExit(0 if x > 0.0 else 1)' "$YOLO_MERGE_RADIUS_M" \
   || fail "YOLO_MERGE_RADIUS_M must be > 0, got '$YOLO_MERGE_RADIUS_M'"
+"$PYTHON_BIN" -c 'import sys; x=float(sys.argv[1]); raise SystemExit(0 if x > 0.0 else 1)' "$YOLO_TEMPORAL_RADIUS_M" \
+  || fail "YOLO_TEMPORAL_RADIUS_M must be > 0, got '$YOLO_TEMPORAL_RADIUS_M'"
 [[ "$AUTO_PREPARE_PSEUDO" =~ ^[01]$ ]] || fail "AUTO_PREPARE_PSEUDO must be 0 or 1"
 [[ "$FORCE_REGENERATE_PSEUDO" =~ ^[01]$ ]] || fail "FORCE_REGENERATE_PSEUDO must be 0 or 1"
+[[ "$YOLO_TEMPORAL_SINGLETONS" =~ ^[01]$ ]] || fail "YOLO_TEMPORAL_SINGLETONS must be 0 or 1"
 case "$YOLO_FOOT_ANCHOR" in
   pose|bbox_bottom|pose_x_bbox_y) ;;
   *) fail "YOLO_FOOT_ANCHOR must be pose, bbox_bottom, or pose_x_bbox_y" ;;
@@ -101,7 +109,7 @@ fi
 [[ -f "$YOLO_MODEL" ]] || fail "Ultralytics did not create the expected model file: $YOLO_MODEL"
 
 generator=(
-  "$PYTHON_BIN" "$YOLO_TOOL"
+  "$PYTHON_BIN" -u "$YOLO_TOOL"
   --dataset "$DATASET"
   --data-root "$DATA_PATH"
   --output "$PSEUDO_DIR"
@@ -116,11 +124,18 @@ generator=(
   --inference-batch "$YOLO_INFERENCE_BATCH"
   --device "$YOLO_DEVICE"
 )
+if [[ "$YOLO_TEMPORAL_SINGLETONS" == "1" ]]; then
+  generator+=(
+    --temporal-singletons
+    --temporal-conf "$YOLO_TEMPORAL_CONF"
+    --temporal-radius-m "$YOLO_TEMPORAL_RADIUS_M"
+  )
+fi
 if [[ "$FORCE_REGENERATE_PSEUDO" == "1" ]]; then
   generator+=(--overwrite)
 fi
 
-echo "Generating pseudo labels with: model=$YOLO_MODEL anchor=$YOLO_FOOT_ANCHOR min_views=$YOLO_MIN_VIEWS"
+echo "Generating pseudo labels with: model=$YOLO_MODEL anchor=$YOLO_FOOT_ANCHOR min_views=$YOLO_MIN_VIEWS merge_radius_m=$YOLO_MERGE_RADIUS_M temporal=$YOLO_TEMPORAL_SINGLETONS"
 CUDA_VISIBLE_DEVICES="$GPU" "${generator[@]}"
 
 pseudo_count="$(count_pseudo_files)"

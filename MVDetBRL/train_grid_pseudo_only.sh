@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # One-command pipeline: prepare YOLO pseudo labels, then train original MVDet.
 set -euo pipefail
+export PYTHONUNBUFFERED="${PYTHONUNBUFFERED:-1}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -24,7 +25,7 @@ PYTHON_BIN="${PYTHON_BIN:-python}"
 
 # Training/grid hyperparameters.
 DROP_RATIOS="${DROP_RATIOS:-45}"
-LAMBDAS="${LAMBDAS:-0.025 0.05 0.1 0.2 0.4}"
+LAMBDAS="${LAMBDAS:-0.005 0.01 0.025}"
 SEEDS="${SEEDS:-1}"
 EPOCHS="${EPOCHS:-10}"
 BATCH_SIZE="${BATCH_SIZE:-1}"
@@ -58,7 +59,10 @@ YOLO_KPT_CONF="${YOLO_KPT_CONF:-0.35}"
 YOLO_CANDIDATE_CONF="${YOLO_CANDIDATE_CONF:-0.15}"
 YOLO_FOOT_ANCHOR="${YOLO_FOOT_ANCHOR:-pose_x_bbox_y}"
 YOLO_MIN_VIEWS="${YOLO_MIN_VIEWS:-2}"
-YOLO_MERGE_RADIUS_M="${YOLO_MERGE_RADIUS_M:-0.75}"
+YOLO_MERGE_RADIUS_M="${YOLO_MERGE_RADIUS_M:-0.60}"
+YOLO_TEMPORAL_SINGLETONS="${YOLO_TEMPORAL_SINGLETONS:-1}"
+YOLO_TEMPORAL_CONF="${YOLO_TEMPORAL_CONF:-0.65}"
+YOLO_TEMPORAL_RADIUS_M="${YOLO_TEMPORAL_RADIUS_M:-0.60}"
 YOLO_INFERENCE_BATCH="${YOLO_INFERENCE_BATCH:-4}"
 
 fail() { echo "Configuration error: $*" >&2; exit 2; }
@@ -114,6 +118,8 @@ YOLO_TOOL="$YOLO_TOOL" YOLO_MODEL="$YOLO_MODEL" YOLO_IMGSZ="$YOLO_IMGSZ" \
 YOLO_DEVICE="$YOLO_DEVICE" YOLO_CONF="$YOLO_CONF" YOLO_KPT_CONF="$YOLO_KPT_CONF" \
 YOLO_CANDIDATE_CONF="$YOLO_CANDIDATE_CONF" YOLO_FOOT_ANCHOR="$YOLO_FOOT_ANCHOR" \
 YOLO_MIN_VIEWS="$YOLO_MIN_VIEWS" YOLO_MERGE_RADIUS_M="$YOLO_MERGE_RADIUS_M" \
+YOLO_TEMPORAL_SINGLETONS="$YOLO_TEMPORAL_SINGLETONS" YOLO_TEMPORAL_CONF="$YOLO_TEMPORAL_CONF" \
+YOLO_TEMPORAL_RADIUS_M="$YOLO_TEMPORAL_RADIUS_M" \
 YOLO_INFERENCE_BATCH="$YOLO_INFERENCE_BATCH" bash "$SCRIPT_DIR/prepare_yolo_pseudo.sh"
 
 echo "===== Model: original MVDet PerspTransDetector ====="
@@ -122,6 +128,7 @@ echo "dataset=$DATASET data=$DATA_PATH pseudo=$PSEUDO_DIR model=$YOLO_MODEL"
 echo "drop_ratios=[$DROP_RATIOS] lambdas=[$LAMBDAS] seeds=[$SEEDS]"
 echo "epochs=$EPOCHS batch=$BATCH_SIZE workers=$NUM_WORKERS lr=$LR momentum=$MOMENTUM weight_decay=$WEIGHT_DECAY alpha=$ALPHA"
 echo "brl_pos_thr=$BRL_POS_THR pseudo_thr=$PSEUDO_THR yolo_conf=$YOLO_CONF min_views=$YOLO_MIN_VIEWS"
+echo "merge_radius_m=$YOLO_MERGE_RADIUS_M temporal=$YOLO_TEMPORAL_SINGLETONS temporal_conf=$YOLO_TEMPORAL_CONF temporal_radius_m=$YOLO_TEMPORAL_RADIUS_M"
 
 for drop_ratio in $DROP_RATIOS; do
   for lambda_pseudo in $LAMBDAS; do
@@ -129,7 +136,7 @@ for drop_ratio in $DROP_RATIOS; do
       run_name="mvdet_pseudo_only_drop${drop_ratio}_lp${lambda_pseudo}_seed${seed}"
       echo "===== Running $run_name ====="
       command=(
-        "$PYTHON_BIN" main.py
+        "$PYTHON_BIN" -u main.py
         -d "$DATASET"
         --data_path "$DATA_PATH"
         --loss brl

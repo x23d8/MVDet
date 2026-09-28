@@ -42,7 +42,14 @@ def parse_args():
         help="image point projected to the ground plane",
     )
     parser.add_argument("--min-views", type=int, default=2)
-    parser.add_argument("--merge-radius-m", type=float, default=0.75)
+    parser.add_argument("--merge-radius-m", type=float, default=0.60)
+    parser.add_argument(
+        "--temporal-singletons",
+        action="store_true",
+        help="rescue high-confidence one-camera clusters that continue an unmatched prior track",
+    )
+    parser.add_argument("--temporal-conf", type=float, default=0.65)
+    parser.add_argument("--temporal-radius-m", type=float, default=0.60)
     parser.add_argument("--train-ratio", type=float, default=0.9)
     parser.add_argument("--start-frame", type=int, default=0)
     parser.add_argument("--end-frame", type=int, default=None)
@@ -105,7 +112,7 @@ def project_candidate(base, dataset_name, camera_index, prediction, foot_anchor)
     }
 
 
-def merge_candidates(candidates, radius_m, min_views):
+def merge_candidates(candidates, radius_m, min_views=1):
     """Greedy confidence-first clustering with at most one point per camera."""
     clusters = []
     for candidate in sorted(candidates, key=lambda item: item["confidence"], reverse=True):
@@ -151,11 +158,84 @@ def merge_candidates(candidates, radius_m, min_views):
                 "center_m": cluster["center_m"],
                 "confidence": float(np.clip(independent_confidence * consistency, 0.0, 1.0)),
                 "num_views": len(cluster["cameras"]),
+                "cameras": sorted(camera + 1 for camera in cluster["cameras"]),
                 "spread_m": float(distances.mean()),
                 "members": members,
             }
         )
     return merged
+
+
+def gated_assignment(source_points, target_points, radius_m):
+    """Hungarian assignment with a hard metric-distance gate."""
+    if not source_points or not target_points:
+        return [], set(range(len(source_points))), set(range(len(target_points)))
+    source = np.asarray(source_points, dtype=np.float64)
+    target = np.asarray(target_points, dtype=np.float64)
+    distances = np.linalg.norm(source[:, None, :] - target[None, :, :], axis=2)
+    source_indices, target_indices = linear_sum_assignment(distances)
+    matches = [
+        (int(source_index), int(target_index))
+        for source_index, target_index in zip(source_indices, target_indices)
+        if distances[source_index, target_index] <= radius_m
+    ]
+    matched_source = {source_index for source_index, _ in matches}
+    matched_target = {target_index for _, target_index in matches}
+    return (
+        matches,
+        set(range(len(source_points))) - matched_source,
+        set(range(len(target_points))) - matched_target,
+    )
+
+
+def select_temporal_clusters(
+    clusters, min_views, previous_tracks, singleton_conf, temporal_radius_m
+):
+    """Keep multi-view clusters and rescue only track-supported singletons.
+
+    Multi-view observations claim prior tracks first, so a singleton cannot
+    duplicate a pedestrian represented by a current multi-view cluster.
+    """
+    multi_view = [cluster for cluster in clusters if cluster["num_views"] >= min_views]
+    singletons = [
+        cluster
+        for cluster in clusters
+        if cluster["num_views"] == 1 and cluster["confidence"] >= singleton_conf
+    ]
+    accepted = list(multi_view)
+    for cluster in accepted:
+        cluster["temporal_rescued"] = False
+    if not previous_tracks:
+        return accepted, [cluster["center_m"] for cluster in accepted], 0
+
+    _, unmatched_tracks, _ = gated_assignment(
+        previous_tracks,
+        [cluster["center_m"] for cluster in multi_view],
+        temporal_radius_m,
+    )
+    unmatched_track_points = [previous_tracks[index] for index in sorted(unmatched_tracks)]
+    singleton_matches, _, _ = gated_assignment(
+        unmatched_track_points,
+        [cluster["center_m"] for cluster in singletons],
+        temporal_radius_m,
+    )
+    rescued_indices = {singleton_index for _, singleton_index in singleton_matches}
+    rescued = [singletons[index] for index in sorted(rescued_indices)]
+    for cluster in rescued:
+        cluster["temporal_rescued"] = True
+    accepted.extend(rescued)
+    return accepted, [cluster["center_m"] for cluster in accepted], len(rescued)
+
+
+def payload_track_centers(base, dataset_name, payload):
+    """Restore prior centers when resuming an interrupted generation run."""
+    centers = []
+    for point in payload.get("points", []):
+        world = base.get_worldcoord_from_worldgrid(
+            np.asarray([point["grid_x"], point["grid_y"]], dtype=np.float64)
+        )
+        centers.append(world_units_to_meters(dataset_name, world))
+    return centers
 
 
 def evaluate_generated_labels(base, dataset_name, data_root, output, frames, radius_m):
@@ -237,7 +317,13 @@ def main():
         raise RuntimeError("No synchronized frames found for the requested range")
 
     model = YOLO(args.model)
-    totals = {"frames": 0, "camera_candidates": 0, "bev_pseudo_points": 0}
+    totals = {
+        "frames": 0,
+        "camera_candidates": 0,
+        "bev_pseudo_points": 0,
+        "temporal_rescued_points": 0,
+    }
+    previous_tracks = []
     for frame_index, frame in enumerate(frames, start=1):
         destination = output / f"{frame:08d}.json"
         if destination.exists() and not args.overwrite:
@@ -248,6 +334,11 @@ def main():
                 existing.get("camera_candidate_counts", {}).values()
             )
             totals["bev_pseudo_points"] += len(existing.get("points", []))
+            totals["temporal_rescued_points"] += sum(
+                bool(point.get("temporal_rescued", False))
+                for point in existing.get("points", [])
+            )
+            previous_tracks = payload_track_centers(base, args.dataset, existing)
             continue
         projected = []
         camera_counts = {}
@@ -275,7 +366,23 @@ def main():
                         accepted += 1
                 camera_counts[str(camera + 1)] = accepted
 
-        merged = merge_candidates(projected, args.merge_radius_m, args.min_views)
+        all_clusters = merge_candidates(projected, args.merge_radius_m, min_views=1)
+        if args.temporal_singletons:
+            merged, previous_tracks, rescued_count = select_temporal_clusters(
+                all_clusters,
+                args.min_views,
+                previous_tracks,
+                args.temporal_conf,
+                args.temporal_radius_m,
+            )
+        else:
+            merged = [
+                cluster for cluster in all_clusters if cluster["num_views"] >= args.min_views
+            ]
+            for cluster in merged:
+                cluster["temporal_rescued"] = False
+            previous_tracks = [cluster["center_m"] for cluster in merged]
+            rescued_count = 0
         points = []
         for cluster in merged:
             world_coord = meters_to_world_units(args.dataset, cluster["center_m"])
@@ -287,6 +394,7 @@ def main():
                     "confidence": cluster["confidence"],
                     "num_views": cluster["num_views"],
                     "spread_m": cluster["spread_m"],
+                    "temporal_rescued": cluster["temporal_rescued"],
                     "members": [
                         {
                             key: value
@@ -308,6 +416,9 @@ def main():
                 "foot_anchor": args.foot_anchor,
                 "min_views": args.min_views,
                 "merge_radius_m": args.merge_radius_m,
+                "temporal_singletons": args.temporal_singletons,
+                "temporal_conf": args.temporal_conf,
+                "temporal_radius_m": args.temporal_radius_m,
             },
             "camera_candidate_counts": camera_counts,
             "points": points,
@@ -317,9 +428,11 @@ def main():
         totals["frames"] += 1
         totals["camera_candidates"] += len(projected)
         totals["bev_pseudo_points"] += len(points)
+        totals["temporal_rescued_points"] += rescued_count
         print(
             f"[{frame_index}/{len(frames)}] frame={frame:08d} "
-            f"candidates={len(projected)} pseudo={len(points)}"
+            f"candidates={len(projected)} pseudo={len(points)} rescued={rescued_count}",
+            flush=True,
         )
 
     summary = {
@@ -335,7 +448,7 @@ def main():
         )
     with (output / "generation_summary.json").open("w", encoding="utf-8") as handle:
         json.dump(summary, handle, indent=2)
-    print(json.dumps(summary, indent=2))
+    print(json.dumps(summary, indent=2), flush=True)
 
 
 if __name__ == "__main__":
