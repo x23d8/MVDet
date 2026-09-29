@@ -24,7 +24,7 @@ from multiview_detector.utils.image_utils import img_color_denormalize
 from multiview_detector.trainer import PerspectiveTrainer
 
 
-def build_criterion(args):
+def build_criterion(args, device):
     if args.loss == 'brl':
         return BRLGaussianMSE(
             pos_thr=args.brl_pos_thr,
@@ -34,11 +34,38 @@ def build_criterion(args):
             use_confuse=args.pseudo_mode != 'pseudo_only',
             pseudo_thr=args.pseudo_thr,
             lambda_pseudo=args.lambda_pseudo,
-        ).cuda()
-    return GaussianMSE().cuda()
+            pseudo_aggregation=args.pseudo_aggregation,
+        ).to(device)
+    return GaussianMSE().to(device)
+
+
+def unwrap_model(model):
+    return model.module if isinstance(model, torch.nn.DataParallel) else model
+
+
+def load_model_state(model, checkpoint_path, device):
+    state = torch.load(checkpoint_path, map_location=device)
+    if isinstance(state, dict) and 'state_dict' in state:
+        state = state['state_dict']
+    state = {key.removeprefix('module.'): value for key, value in state.items()}
+    unwrap_model(model).load_state_dict(state)
 
 
 def main(args):
+    if not torch.cuda.is_available():
+        raise RuntimeError('CUDA is required for MVDet training')
+    device_ids = [int(value.strip()) for value in args.device_ids.split(',') if value.strip()]
+    if not device_ids:
+        raise ValueError('--device_ids must contain at least one logical CUDA device id')
+    available_devices = torch.cuda.device_count()
+    if max(device_ids) >= available_devices:
+        raise ValueError(
+            f'--device_ids={args.device_ids} requests a logical CUDA device that is unavailable; '
+            f'visible CUDA device count is {available_devices}'
+        )
+    primary_device = torch.device(f'cuda:{device_ids[0]}')
+    torch.cuda.set_device(primary_device)
+
     # seed
     if args.seed is not None:
         np.random.seed(args.seed)
@@ -94,7 +121,9 @@ def main(args):
 
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
                                                num_workers=args.num_workers, pin_memory=True)
-    test_loader = torch.utils.data.DataLoader(test_set, batch_size=args.batch_size, shuffle=False,
+    # The legacy evaluator builds one frame id per BEV map and therefore expects
+    # batch size 1. Training can still use a larger global batch across GPUs.
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False,
                                               num_workers=args.num_workers, pin_memory=True)
 
     # model
@@ -108,16 +137,22 @@ def main(args):
         model = NoJointConvVariant(train_set, args.arch)
     else:
         raise Exception('no support for this variant')
+    model = model.to(primary_device)
     if args.load is not None:
-        model.load_state_dict(torch.load(args.load))
+        load_model_state(model, args.load, primary_device)
         print(f'{args.load} loaded')
+    if len(device_ids) > 1:
+        model = torch.nn.DataParallel(
+            model, device_ids=device_ids, output_device=device_ids[0]
+        )
+        print(f'DataParallel enabled on logical CUDA devices {device_ids}')
 
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.lr, steps_per_epoch=len(train_loader),
                                                     epochs=args.epochs)
 
     # loss
-    criterion = build_criterion(args)
+    criterion = build_criterion(args, primary_device)
 
     # logging
     drop_tag = f'drop_{args.drop_ratio}' if args.drop_ratio > 0 else 'full'
@@ -126,7 +161,7 @@ def main(args):
         if args.brl_no_mirror:
             loss_tag += '_nomirror'
         if args.pseudo_mode != 'none':
-            loss_tag += f'_{args.pseudo_mode}_lp{args.lambda_pseudo}'
+            loss_tag += f'_{args.pseudo_mode}_lp{args.lambda_pseudo}_agg{args.pseudo_aggregation}'
     else:
         loss_tag = 'mse'
     logdir = args.logdir
@@ -177,11 +212,11 @@ def main(args):
             draw_curve(os.path.join(logdir, 'learning_curve.jpg'), x_epoch, train_loss_s, train_prec_s,
                        test_loss_s, test_prec_s, test_moda_s)
             # save
-            torch.save(model.state_dict(), os.path.join(logdir, 'MultiviewDetector.pth'))
+            torch.save(unwrap_model(model).state_dict(), os.path.join(logdir, 'MultiviewDetector.pth'))
     else:
         resume_dir = f'logs/{args.dataset}_frame/{drop_tag}/{loss_tag}/{args.variant}/' + args.resume
         resume_fname = resume_dir + '/MultiviewDetector.pth'
-        model.load_state_dict(torch.load(resume_fname))
+        load_model_state(model, resume_fname, primary_device)
         model.eval()
     print('Test loaded model...')
     trainer.test(test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, False)
@@ -216,6 +251,8 @@ if __name__ == '__main__':
     parser.add_argument('--loginfo', type=str, default='')
     parser.add_argument('--logdir', type=str, default=None)
     parser.add_argument('--load', type=str, default=None)
+    parser.add_argument('--device_ids', type=str, default='0',
+                        help='logical CUDA ids visible to this process, e.g. 0 or 0,1')
     
     # Dropped annotations
     parser.add_argument('--drop_ratio', type=int, default=0,
@@ -241,6 +278,8 @@ if __name__ == '__main__':
                         help='Gaussian pseudo heatmap threshold used to define pseudo-positive pixels')
     parser.add_argument('--lambda_pseudo', type=float, default=0.1,
                         help='weight of the separately normalized pseudo-label loss')
+    parser.add_argument('--pseudo_aggregation', type=str, default='sum', choices=['sum', 'max'],
+                        help='combine projected pseudo Gaussian maps by addition or pixel-wise maximum')
     args = parser.parse_args()
 
     main(args)

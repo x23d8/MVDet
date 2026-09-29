@@ -18,7 +18,7 @@ class PerspTransDetector(nn.Module):
         imgcoord2worldgrid_matrices = self.get_imgcoord2worldgrid_matrices(dataset.base.intrinsic_matrices,
                                                                            dataset.base.extrinsic_matrices,
                                                                            dataset.base.worldgrid2worldcoord_mat)
-        self.coord_map = self.create_coord_map(self.reducedgrid_shape + [1])
+        self.register_buffer('coord_map', self.create_coord_map(self.reducedgrid_shape + [1]))
         # img
         self.upsample_shape = list(map(lambda x: int(x / dataset.img_reduce), self.img_shape))
         img_reduce = np.array(self.img_shape) / np.array(self.upsample_shape)
@@ -26,32 +26,37 @@ class PerspTransDetector(nn.Module):
         # map
         map_zoom_mat = np.diag(np.append(np.ones([2]) / dataset.grid_reduce, [1]))
         # projection matrices: img feat -> map feat
-        self.proj_mats = [torch.from_numpy(map_zoom_mat @ imgcoord2worldgrid_matrices[cam] @ img_zoom_mat)
-                          for cam in range(self.num_cam)]
+        self.register_buffer(
+            'proj_mats',
+            torch.stack([
+                torch.from_numpy(map_zoom_mat @ imgcoord2worldgrid_matrices[cam] @ img_zoom_mat).float()
+                for cam in range(self.num_cam)
+            ]),
+        )
 
         if arch == 'vgg11':
             base = vgg11().features
             base[-1] = nn.Sequential()
             base[-4] = nn.Sequential()
             split = 10
-            self.base_pt1 = base[:split].to('cuda:0')
-            self.base_pt2 = base[split:].to('cuda:0')
+            self.base_pt1 = base[:split]
+            self.base_pt2 = base[split:]
             out_channel = 512
         elif arch == 'resnet18':
             base = nn.Sequential(*list(resnet18(replace_stride_with_dilation=[False, True, True]).children())[:-2])
             split = 7
-            self.base_pt1 = base[:split].to('cuda:0')
-            self.base_pt2 = base[split:].to('cuda:0')
+            self.base_pt1 = base[:split]
+            self.base_pt2 = base[split:]
             out_channel = 512
         else:
             raise Exception('architecture currently support [vgg11, resnet18]')
         # 2.5cm -> 0.5m: 20x
         self.img_classifier = nn.Sequential(nn.Conv2d(out_channel, 64, 1), nn.ReLU(),
-                                            nn.Conv2d(64, 2, 1, bias=False)).to('cuda:0')
+                                            nn.Conv2d(64, 2, 1, bias=False))
         self.map_classifier = nn.Sequential(nn.Conv2d(out_channel * self.num_cam + 2, 512, 3, padding=1), nn.ReLU(),
                                             # nn.Conv2d(512, 512, 5, 1, 2), nn.ReLU(),
                                             nn.Conv2d(512, 512, 3, padding=2, dilation=2), nn.ReLU(),
-                                            nn.Conv2d(512, 1, 3, padding=4, dilation=4, bias=False)).to('cuda:0')
+                                            nn.Conv2d(512, 1, 3, padding=4, dilation=4, bias=False))
         pass
 
     def forward(self, imgs, visualize=False):
@@ -60,25 +65,25 @@ class PerspTransDetector(nn.Module):
         world_features = []
         imgs_result = []
         for cam in range(self.num_cam):
-            img_feature = self.base_pt1(imgs[:, cam].to('cuda:0'))
-            img_feature = self.base_pt2(img_feature.to('cuda:0'))
+            img_feature = self.base_pt1(imgs[:, cam])
+            img_feature = self.base_pt2(img_feature)
             img_feature = F.interpolate(img_feature, self.upsample_shape, mode='bilinear')
-            img_res = self.img_classifier(img_feature.to('cuda:0'))
+            img_res = self.img_classifier(img_feature)
             imgs_result.append(img_res)
-            proj_mat = self.proj_mats[cam].repeat([B, 1, 1]).float().to('cuda:0')
-            world_feature = warp_perspective(img_feature.to('cuda:0'), proj_mat, self.reducedgrid_shape)
+            proj_mat = self.proj_mats[cam].unsqueeze(0).expand(B, -1, -1)
+            world_feature = warp_perspective(img_feature, proj_mat, self.reducedgrid_shape)
             if visualize:
                 plt.imshow(torch.norm(img_feature[0].detach(), dim=0).cpu().numpy())
                 plt.show()
                 plt.imshow(torch.norm(world_feature[0].detach(), dim=0).cpu().numpy())
                 plt.show()
-            world_features.append(world_feature.to('cuda:0'))
+            world_features.append(world_feature)
 
-        world_features = torch.cat(world_features + [self.coord_map.repeat([B, 1, 1, 1]).to('cuda:0')], dim=1)
+        world_features = torch.cat(world_features + [self.coord_map.expand(B, -1, -1, -1)], dim=1)
         if visualize:
             plt.imshow(torch.norm(world_features[0].detach(), dim=0).cpu().numpy())
             plt.show()
-        map_result = self.map_classifier(world_features.to('cuda:0'))
+        map_result = self.map_classifier(world_features)
         map_result = F.interpolate(map_result, self.reducedgrid_shape, mode='bilinear')
 
         if visualize:

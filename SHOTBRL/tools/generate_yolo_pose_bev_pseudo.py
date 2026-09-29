@@ -56,6 +56,12 @@ def parse_args():
     parser.add_argument("--conf", type=float, default=0.25)
     parser.add_argument("--candidate-conf", type=float, default=0.20)
     parser.add_argument(
+        "--fusion-mode",
+        choices=["cluster", "pixelwise_max"],
+        default="cluster",
+        help="cluster merges nearby projected points; pixelwise_max preserves every point for max-Gaussian supervision",
+    )
+    parser.add_argument(
         "--foot-anchor",
         choices=["bbox_bottom"],
         default="bbox_bottom",
@@ -381,53 +387,67 @@ def main():
                         accepted += 1
                 camera_counts[str(camera + 1)] = accepted
 
-        all_clusters = merge_candidates(projected, args.merge_radius_m, min_views=1)
-        if args.temporal_singletons:
-            merged, previous_tracks, rescued_count = select_temporal_clusters(
-                all_clusters,
-                args.min_views,
-                previous_tracks,
-                args.temporal_conf,
-                args.temporal_radius_m,
-            )
-        else:
-            merged = [
-                cluster for cluster in all_clusters if cluster["num_views"] >= args.min_views
-            ]
-            for cluster in merged:
-                cluster["temporal_rescued"] = False
-            previous_tracks = [cluster["center_m"] for cluster in merged]
-            rescued_count = 0
         points = []
-        for cluster in merged:
-            world_coord = meters_to_world_units(args.dataset, cluster["center_m"])
-            grid = base.get_worldgrid_from_worldcoord(world_coord)
-            points.append(
-                {
-                    "grid_x": float(grid[0]),
-                    "grid_y": float(grid[1]),
-                    "confidence": cluster["confidence"],
-                    "num_views": cluster["num_views"],
-                    "spread_m": cluster["spread_m"],
-                    "temporal_rescued": cluster["temporal_rescued"],
-                    "members": [
-                        {
-                            key: value
-                            for key, value in member.items()
-                            if key not in {"world_m"}
-                        }
-                        for member in cluster["members"]
-                    ],
-                }
-            )
+        rescued_count = 0
+        if args.fusion_mode == "pixelwise_max":
+            previous_tracks = []
+            for candidate in projected:
+                points.append(
+                    {
+                        "grid_x": candidate["grid_x"],
+                        "grid_y": candidate["grid_y"],
+                        "confidence": candidate["confidence"],
+                        "num_views": 1,
+                        "spread_m": 0.0,
+                        "temporal_rescued": False,
+                        "camera": candidate["camera"] + 1,
+                        "members": [
+                            {key: value for key, value in candidate.items() if key != "world_m"}
+                        ],
+                    }
+                )
+        else:
+            all_clusters = merge_candidates(projected, args.merge_radius_m, min_views=1)
+            if args.temporal_singletons:
+                merged, previous_tracks, rescued_count = select_temporal_clusters(
+                    all_clusters,
+                    args.min_views,
+                    previous_tracks,
+                    args.temporal_conf,
+                    args.temporal_radius_m,
+                )
+            else:
+                merged = [
+                    cluster for cluster in all_clusters if cluster["num_views"] >= args.min_views
+                ]
+                for cluster in merged:
+                    cluster["temporal_rescued"] = False
+                previous_tracks = [cluster["center_m"] for cluster in merged]
+            for cluster in merged:
+                world_coord = meters_to_world_units(args.dataset, cluster["center_m"])
+                grid = base.get_worldgrid_from_worldcoord(world_coord)
+                points.append(
+                    {
+                        "grid_x": float(grid[0]),
+                        "grid_y": float(grid[1]),
+                        "confidence": cluster["confidence"],
+                        "num_views": cluster["num_views"],
+                        "spread_m": cluster["spread_m"],
+                        "temporal_rescued": cluster["temporal_rescued"],
+                        "members": [
+                            {key: value for key, value in member.items() if key != "world_m"}
+                            for member in cluster["members"]
+                        ],
+                    }
+                )
         payload = {
             "frame": frame,
             "model": args.model,
             "settings": {
                 "imgsz": args.imgsz,
                 "det_conf": args.conf,
-                "keypoint_conf": args.kpt_conf,
                 "candidate_conf": args.candidate_conf,
+                "fusion_mode": args.fusion_mode,
                 "foot_anchor": args.foot_anchor,
                 "min_views": args.min_views,
                 "merge_radius_m": args.merge_radius_m,
@@ -455,6 +475,7 @@ def main():
         "data_root": str(data_root),
         "output": str(output),
         "model": args.model,
+        "fusion_mode": args.fusion_mode,
         **totals,
     }
     if args.evaluate_gt:

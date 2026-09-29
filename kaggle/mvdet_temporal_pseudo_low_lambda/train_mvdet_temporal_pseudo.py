@@ -72,7 +72,12 @@ def configure_yolo_bbox_detector() -> None:
     if not generator.is_file():
         raise FileNotFoundError(f"YOLO pseudo-label generator not found: {generator}")
     source = generator.read_text(encoding="utf-8")
+    legacy_keypoint_setting = '                "keypoint_conf": args.kpt_conf,\n'
     if "def extract_bbox_predictions(result):" in source:
+        if legacy_keypoint_setting in source:
+            source = source.replace(legacy_keypoint_setting, "", 1)
+            generator.write_text(source, encoding="utf-8")
+            log("Removed stale keypoint_conf reference from detection-only generator")
         log("YOLO generator already uses detection-only bbox footprints")
         return
 
@@ -109,6 +114,7 @@ def configure_yolo_bbox_detector() -> None:
         if old not in source:
             raise RuntimeError(f"Cannot configure detection-only YOLO; missing source fragment: {old!r}")
         source = source.replace(old, new, 1)
+    source = source.replace(legacy_keypoint_setting, "", 1)
     generator.write_text(source, encoding="utf-8")
     log("Configured YOLO26x detection-only footprints: ((x1+x2)/2, y2), classes=[0]")
 

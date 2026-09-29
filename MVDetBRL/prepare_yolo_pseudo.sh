@@ -24,6 +24,7 @@ YOLO_IMGSZ="${YOLO_IMGSZ:-1280}"
 YOLO_DEVICE="${YOLO_DEVICE:-0}"
 YOLO_CONF="${YOLO_CONF:-0.20}"
 YOLO_CANDIDATE_CONF="${YOLO_CANDIDATE_CONF:-0.20}"
+YOLO_FUSION_MODE="${YOLO_FUSION_MODE:-cluster}"
 YOLO_FOOT_ANCHOR="${YOLO_FOOT_ANCHOR:-bbox_bottom}"
 YOLO_MIN_VIEWS="${YOLO_MIN_VIEWS:-2}"
 YOLO_MERGE_RADIUS_M="${YOLO_MERGE_RADIUS_M:-0.60}"
@@ -77,6 +78,10 @@ case "$YOLO_FOOT_ANCHOR" in
   bbox_bottom) ;;
   *) fail "detection-only YOLO requires YOLO_FOOT_ANCHOR=bbox_bottom" ;;
 esac
+case "$YOLO_FUSION_MODE" in
+  cluster|pixelwise_max) ;;
+  *) fail "YOLO_FUSION_MODE must be cluster or pixelwise_max" ;;
+esac
 case "$DATASET" in
   wildtrack) NUM_CAMERAS=7 ;;
   multiviewx) NUM_CAMERAS=6 ;;
@@ -115,6 +120,7 @@ generator=(
   --imgsz "$YOLO_IMGSZ"
   --conf "$YOLO_CONF"
   --candidate-conf "$YOLO_CANDIDATE_CONF"
+  --fusion-mode "$YOLO_FUSION_MODE"
   --foot-anchor "$YOLO_FOOT_ANCHOR"
   --min-views "$YOLO_MIN_VIEWS"
   --merge-radius-m "$YOLO_MERGE_RADIUS_M"
@@ -132,7 +138,7 @@ if [[ "$FORCE_REGENERATE_PSEUDO" == "1" ]]; then
   generator+=(--overwrite)
 fi
 
-echo "Generating pseudo labels with: model=$YOLO_MODEL anchor=$YOLO_FOOT_ANCHOR min_views=$YOLO_MIN_VIEWS merge_radius_m=$YOLO_MERGE_RADIUS_M temporal=$YOLO_TEMPORAL_SINGLETONS"
+echo "Generating pseudo labels with: model=$YOLO_MODEL anchor=$YOLO_FOOT_ANCHOR fusion=$YOLO_FUSION_MODE min_views=$YOLO_MIN_VIEWS merge_radius_m=$YOLO_MERGE_RADIUS_M temporal=$YOLO_TEMPORAL_SINGLETONS"
 CUDA_VISIBLE_DEVICES="$GPU" "${generator[@]}"
 
 pseudo_count="$(count_pseudo_files)"

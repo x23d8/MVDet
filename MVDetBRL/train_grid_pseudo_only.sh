@@ -11,11 +11,11 @@ DATASET="${DATASET:-wildtrack}"
 case "$DATASET" in
   wildtrack)
     DEFAULT_DATA_PATH="../Data/Wildtrack"
-    DEFAULT_PSEUDO_DIR="./pseudo_labels/wildtrack_yolo26m"
+    DEFAULT_PSEUDO_DIR="./pseudo_labels/wildtrack_yolo26x"
     ;;
   multiviewx)
     DEFAULT_DATA_PATH="../Data/MultiviewX"
-    DEFAULT_PSEUDO_DIR="./pseudo_labels/multiviewx_yolo26m"
+    DEFAULT_PSEUDO_DIR="./pseudo_labels/multiviewx_yolo26x"
     ;;
   *) echo "Unsupported DATASET: $DATASET" >&2; exit 2 ;;
 esac
@@ -36,7 +36,9 @@ WEIGHT_DECAY="${WEIGHT_DECAY:-0.0005}"
 ALPHA="${ALPHA:-1.0}"
 BRL_POS_THR="${BRL_POS_THR:-0.1}"
 PSEUDO_THR="${PSEUDO_THR:-0.1}"
+PSEUDO_AGGREGATION="${PSEUDO_AGGREGATION:-sum}"
 GPU="${GPU:-0}"
+DEVICE_IDS="${DEVICE_IDS:-0}"
 
 # Automatic YOLO/pseudo-label preparation.
 MIN_PSEUDO_FILES="${MIN_PSEUDO_FILES:-360}"
@@ -44,12 +46,12 @@ AUTO_PREPARE_PSEUDO="${AUTO_PREPARE_PSEUDO:-1}"
 FORCE_REGENERATE_PSEUDO="${FORCE_REGENERATE_PSEUDO:-0}"
 YOLO_TOOL="${YOLO_TOOL:-../SHOTBRL/tools/generate_yolo_pose_bev_pseudo.py}"
 if [[ -z "${YOLO_MODEL:-}" ]]; then
-  if [[ -f "../SHOTBRL/yolo26m-pose.pt" ]]; then
-    YOLO_MODEL="../SHOTBRL/yolo26m-pose.pt"
-  elif [[ -f "../yolo26m-pose.pt" ]]; then
-    YOLO_MODEL="../yolo26m-pose.pt"
+  if [[ -f "../SHOTBRL/yolo26x.pt" ]]; then
+    YOLO_MODEL="../SHOTBRL/yolo26x.pt"
+  elif [[ -f "../yolo26x.pt" ]]; then
+    YOLO_MODEL="../yolo26x.pt"
   else
-    YOLO_MODEL="./yolo26m-pose.pt"
+    YOLO_MODEL="./yolo26x.pt"
   fi
 fi
 YOLO_IMGSZ="${YOLO_IMGSZ:-1280}"
@@ -57,7 +59,8 @@ YOLO_DEVICE="${YOLO_DEVICE:-0}"
 YOLO_CONF="${YOLO_CONF:-0.25}"
 YOLO_KPT_CONF="${YOLO_KPT_CONF:-0.35}"
 YOLO_CANDIDATE_CONF="${YOLO_CANDIDATE_CONF:-0.15}"
-YOLO_FOOT_ANCHOR="${YOLO_FOOT_ANCHOR:-pose_x_bbox_y}"
+YOLO_FUSION_MODE="${YOLO_FUSION_MODE:-cluster}"
+YOLO_FOOT_ANCHOR="${YOLO_FOOT_ANCHOR:-bbox_bottom}"
 YOLO_MIN_VIEWS="${YOLO_MIN_VIEWS:-2}"
 YOLO_MERGE_RADIUS_M="${YOLO_MERGE_RADIUS_M:-0.60}"
 YOLO_TEMPORAL_SINGLETONS="${YOLO_TEMPORAL_SINGLETONS:-1}"
@@ -98,6 +101,10 @@ nonnegative_float WEIGHT_DECAY "$WEIGHT_DECAY"
 nonnegative_float ALPHA "$ALPHA"
 probability BRL_POS_THR "$BRL_POS_THR"
 probability PSEUDO_THR "$PSEUDO_THR"
+case "$PSEUDO_AGGREGATION" in
+  sum|max) ;;
+  *) fail "PSEUDO_AGGREGATION must be sum or max" ;;
+esac
 for drop_ratio in $DROP_RATIOS; do
   case "$drop_ratio" in
     0) ;;
@@ -116,7 +123,8 @@ PYTHON_BIN="$PYTHON_BIN" GPU="$GPU" MIN_PSEUDO_FILES="$MIN_PSEUDO_FILES" \
 AUTO_PREPARE_PSEUDO="$AUTO_PREPARE_PSEUDO" FORCE_REGENERATE_PSEUDO="$FORCE_REGENERATE_PSEUDO" \
 YOLO_TOOL="$YOLO_TOOL" YOLO_MODEL="$YOLO_MODEL" YOLO_IMGSZ="$YOLO_IMGSZ" \
 YOLO_DEVICE="$YOLO_DEVICE" YOLO_CONF="$YOLO_CONF" YOLO_KPT_CONF="$YOLO_KPT_CONF" \
-YOLO_CANDIDATE_CONF="$YOLO_CANDIDATE_CONF" YOLO_FOOT_ANCHOR="$YOLO_FOOT_ANCHOR" \
+YOLO_CANDIDATE_CONF="$YOLO_CANDIDATE_CONF" YOLO_FUSION_MODE="$YOLO_FUSION_MODE" \
+YOLO_FOOT_ANCHOR="$YOLO_FOOT_ANCHOR" \
 YOLO_MIN_VIEWS="$YOLO_MIN_VIEWS" YOLO_MERGE_RADIUS_M="$YOLO_MERGE_RADIUS_M" \
 YOLO_TEMPORAL_SINGLETONS="$YOLO_TEMPORAL_SINGLETONS" YOLO_TEMPORAL_CONF="$YOLO_TEMPORAL_CONF" \
 YOLO_TEMPORAL_RADIUS_M="$YOLO_TEMPORAL_RADIUS_M" \
@@ -127,13 +135,14 @@ echo "===== Loss: pseudo_only (self-confuse disabled) ====="
 echo "dataset=$DATASET data=$DATA_PATH pseudo=$PSEUDO_DIR model=$YOLO_MODEL"
 echo "drop_ratios=[$DROP_RATIOS] lambdas=[$LAMBDAS] seeds=[$SEEDS]"
 echo "epochs=$EPOCHS batch=$BATCH_SIZE workers=$NUM_WORKERS lr=$LR momentum=$MOMENTUM weight_decay=$WEIGHT_DECAY alpha=$ALPHA"
-echo "brl_pos_thr=$BRL_POS_THR pseudo_thr=$PSEUDO_THR yolo_conf=$YOLO_CONF min_views=$YOLO_MIN_VIEWS"
+echo "brl_pos_thr=$BRL_POS_THR pseudo_thr=$PSEUDO_THR pseudo_aggregation=$PSEUDO_AGGREGATION yolo_conf=$YOLO_CONF fusion=$YOLO_FUSION_MODE min_views=$YOLO_MIN_VIEWS"
+echo "cuda_visible_devices=$GPU logical_device_ids=$DEVICE_IDS"
 echo "merge_radius_m=$YOLO_MERGE_RADIUS_M temporal=$YOLO_TEMPORAL_SINGLETONS temporal_conf=$YOLO_TEMPORAL_CONF temporal_radius_m=$YOLO_TEMPORAL_RADIUS_M"
 
 for drop_ratio in $DROP_RATIOS; do
   for lambda_pseudo in $LAMBDAS; do
     for seed in $SEEDS; do
-      run_name="mvdet_pseudo_only_drop${drop_ratio}_lp${lambda_pseudo}_seed${seed}"
+      run_name="mvdet_pseudo_only_${PSEUDO_AGGREGATION}_drop${drop_ratio}_lp${lambda_pseudo}_seed${seed}"
       echo "===== Running $run_name ====="
       command=(
         "$PYTHON_BIN" -u main.py
@@ -145,6 +154,7 @@ for drop_ratio in $DROP_RATIOS; do
         --pseudo_dir "$PSEUDO_DIR"
         --lambda_pseudo "$lambda_pseudo"
         --pseudo_thr "$PSEUDO_THR"
+        --pseudo_aggregation "$PSEUDO_AGGREGATION"
         --brl_pos_thr "$BRL_POS_THR"
         --brl_no_mirror
         --epochs "$EPOCHS"
@@ -155,6 +165,7 @@ for drop_ratio in $DROP_RATIOS; do
         --weight_decay "$WEIGHT_DECAY"
         --alpha "$ALPHA"
         --seed "$seed"
+        --device_ids "$DEVICE_IDS"
         --loginfo "$run_name"
       )
       command+=("$@")

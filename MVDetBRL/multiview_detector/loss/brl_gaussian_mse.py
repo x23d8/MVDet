@@ -19,7 +19,7 @@ class BRLGaussianMSE(nn.Module):
 
     def __init__(self, pos_thr=0.1, confuse_pred_thr=0.3, beta=0.1,
                  mirror=True, use_confuse=True, pseudo_thr=0.1,
-                 lambda_pseudo=0.1):
+                 lambda_pseudo=0.1, pseudo_aggregation="sum"):
         super().__init__()
         self.pos_thr = pos_thr
         self.confuse_pred_thr = confuse_pred_thr
@@ -28,6 +28,9 @@ class BRLGaussianMSE(nn.Module):
         self.use_confuse = use_confuse
         self.pseudo_thr = pseudo_thr
         self.lambda_pseudo = lambda_pseudo
+        if pseudo_aggregation not in {"sum", "max"}:
+            raise ValueError("pseudo_aggregation must be 'sum' or 'max'")
+        self.pseudo_aggregation = pseudo_aggregation
         self.last_components = {}
 
     def forward(self, x, target, kernel, pseudo_target=None, pseudo_conf=None):
@@ -39,11 +42,16 @@ class BRLGaussianMSE(nn.Module):
         soft_pseudo = None
         soft_pseudo_conf = None
         if pseudo_target is not None:
-            soft_pseudo = self._traget_transform(x, pseudo_target, kernel)
+            pseudo_transform = (
+                self._max_target_transform
+                if self.pseudo_aggregation == "max"
+                else self._traget_transform
+            )
+            soft_pseudo = pseudo_transform(x, pseudo_target, kernel)
             pseudo_mask = (soft_pseudo >= self.pseudo_thr) & ~pos_mask
             if pseudo_conf is None:
                 pseudo_conf = (pseudo_target > 0).to(dtype=x.dtype)
-            soft_pseudo_conf = self._traget_transform(x, pseudo_conf, kernel)
+            soft_pseudo_conf = pseudo_transform(x, pseudo_conf, kernel)
             soft_pseudo_conf = soft_pseudo_conf.clamp(min=0.0, max=1.0)
 
         rest_mask = ~(pos_mask | pseudo_mask)
@@ -111,3 +119,26 @@ class BRLGaussianMSE(nn.Module):
                 padding=int((kernel.shape[-1] - 1) / 2),
             )
         return target
+
+    def _max_target_transform(self, x, target, kernel):
+        """Rasterize point impulses as a pixel-wise maximum of Gaussian kernels."""
+        target = F.adaptive_max_pool2d(target, x.shape[2:])
+        kernel = kernel.float().to(target.device)
+        if target.shape[1] != 1 or kernel.shape[:2] != (1, 1):
+            raise ValueError("max pseudo aggregation currently expects one BEV channel")
+        result = torch.zeros_like(target)
+        radius_y = kernel.shape[-2] // 2
+        radius_x = kernel.shape[-1] // 2
+        with torch.no_grad():
+            for batch_index in range(target.shape[0]):
+                for y, x_coord in (target[batch_index, 0] > 0).nonzero(as_tuple=False):
+                    y, x_coord = int(y), int(x_coord)
+                    y0, y1 = max(0, y - radius_y), min(target.shape[-2], y + radius_y + 1)
+                    x0, x1 = max(0, x_coord - radius_x), min(target.shape[-1], x_coord + radius_x + 1)
+                    ky0, ky1 = y0 - (y - radius_y), kernel.shape[-2] - ((y + radius_y + 1) - y1)
+                    kx0, kx1 = x0 - (x_coord - radius_x), kernel.shape[-1] - ((x_coord + radius_x + 1) - x1)
+                    patch = target[batch_index, 0, y, x_coord] * kernel[0, 0, ky0:ky1, kx0:kx1]
+                    result[batch_index, 0, y0:y1, x0:x1] = torch.maximum(
+                        result[batch_index, 0, y0:y1, x0:x1], patch
+                    )
+        return result
