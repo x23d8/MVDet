@@ -396,40 +396,44 @@ def main(args):
         should_evaluate = args.eval_every > 0 and (
             epoch % args.eval_every == 0 and epoch != args.epochs
         )
-        if should_evaluate:
-            print('Testing...')
-            test_loss, test_prec, moda = trainer.test(
-                test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, True
-            )
-            test_loss_s.append(test_loss)
-            test_prec_s.append(test_prec)
-            test_moda_s.append(moda)
-            if args.eval_every == 1:
-                draw_curve(
-                    os.path.join(logdir, 'learning_curve.jpg'),
-                    x_epoch, train_loss_s, train_prec_s,
-                    test_loss_s, test_prec_s, test_moda_s,
+        try:
+            if should_evaluate:
+                print('Testing...')
+                test_loss, test_prec, moda = trainer.test(
+                    test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, True
                 )
-        torch.save(
-            model_without_wrapper.state_dict(),
-            os.path.join(logdir, 'MultiviewDetector.pth'),
-        )
-        save_checkpoint_atomic(os.path.join(logdir, 'training_state.pth'), {
-            'epoch': epoch,
-            'configured_epochs': args.epochs,
-            'model': model_without_wrapper.state_dict(),
-            'optimizer': optimizer.state_dict(),
-            'scheduler': scheduler.state_dict(),
-            'scaler': trainer.scaler.state_dict(),
-            'rng_state': capture_rng_state(),
-            'x_epoch': x_epoch,
-            'train_loss_s': train_loss_s,
-            'train_prec_s': train_prec_s,
-            'test_loss_s': test_loss_s,
-            'test_prec_s': test_prec_s,
-            'test_moda_s': test_moda_s,
-            'args': vars(args),
-        })
+                test_loss_s.append(test_loss)
+                test_prec_s.append(test_prec)
+                test_moda_s.append(moda)
+                if args.eval_every == 1:
+                    draw_curve(
+                        os.path.join(logdir, 'learning_curve.jpg'),
+                        x_epoch, train_loss_s, train_prec_s,
+                        test_loss_s, test_prec_s, test_moda_s,
+                    )
+        finally:
+            # A completed training epoch must remain resumable even if
+            # evaluation, plotting, or metric export fails afterwards.
+            torch.save(
+                model_without_wrapper.state_dict(),
+                os.path.join(logdir, 'MultiviewDetector.pth'),
+            )
+            save_checkpoint_atomic(os.path.join(logdir, 'training_state.pth'), {
+                'epoch': epoch,
+                'configured_epochs': args.epochs,
+                'model': model_without_wrapper.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'scheduler': scheduler.state_dict(),
+                'scaler': trainer.scaler.state_dict(),
+                'rng_state': capture_rng_state(),
+                'x_epoch': x_epoch,
+                'train_loss_s': train_loss_s,
+                'train_prec_s': train_prec_s,
+                'test_loss_s': test_loss_s,
+                'test_prec_s': test_prec_s,
+                'test_moda_s': test_moda_s,
+                'args': vars(args),
+            })
     print('Testing...')
     trainer.test(
         test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, True,

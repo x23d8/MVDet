@@ -270,9 +270,16 @@ class PerspectiveTrainer(BaseTrainer):
             fig = plt.figure()
             subplt0 = fig.add_subplot(211, title="output")
             subplt1 = fig.add_subplot(212, title="target")
-            subplt0.imshow(map_res.cpu().detach().numpy().squeeze())
-            subplt1.imshow(self.criterion._traget_transform(map_res, map_gt, data_loader.dataset.map_kernel)
-                           .cpu().detach().numpy().squeeze())
+            # Visualization historically assumed batch_size=1 and squeezed
+            # every singleton dimension. With DataParallel batch_size=2 that
+            # leaves [B,H,W], which matplotlib cannot display. Visualize one
+            # explicit sample/channel while metrics still use the full batch.
+            map_visual = map_res[0, 0].detach().float().cpu().numpy()
+            target_visual = self.criterion._traget_transform(
+                map_res, map_gt, data_loader.dataset.map_kernel
+            )[0, 0].detach().float().cpu().numpy()
+            subplt0.imshow(map_visual)
+            subplt1.imshow(target_visual)
             plt.savefig(os.path.join(self.logdir, 'map.jpg'))
             plt.close(fig)
 

@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
+from pathlib import Path
 
 from multiview_detector.loss.gaussian_mse import GaussianMSE
 from multiview_detector.loss.camera_drop_consistency import CameraDropConsistencyLoss
@@ -22,6 +23,11 @@ class _OneFrame(Dataset):
         map_target[0, 2, 3] = 1.0
         image_targets = [torch.zeros(2, 64, 96) for _ in range(2)]
         return images, map_target, image_targets, index
+
+
+class _TwoFrames(_OneFrame):
+    def __len__(self):
+        return 2
 
 
 def test_hybrid_query_loss_runs_through_legacy_trainer(tmp_path):
@@ -64,3 +70,26 @@ def test_camera_dropout_always_keeps_and_drops_a_view_when_possible():
         )
         assert mask.any(dim=1).all()
         assert (~mask).any(dim=1).all()
+
+
+def test_visualization_supports_evaluation_batch_larger_than_one(tmp_path):
+    model = PUMAHybridDetector(
+        _TinyDataset(),
+        feature_channels=8,
+        fused_channels=8,
+        heights_m=(0.0,),
+        world_unit_to_m=1.0,
+        num_queries=2,
+        query_hidden_channels=8,
+        query_layers=1,
+    )
+    trainer = PerspectiveTrainer(
+        model,
+        GaussianMSE(),
+        str(tmp_path),
+        denormalize=lambda value: value.clamp(0.0, 1.0),
+    )
+    trainer.test(DataLoader(_TwoFrames(), batch_size=2), visualize=True)
+    assert (Path(tmp_path) / "map.jpg").is_file()
+    assert (Path(tmp_path) / "cam1_head.jpg").is_file()
+    assert (Path(tmp_path) / "cam1_foot.jpg").is_file()
