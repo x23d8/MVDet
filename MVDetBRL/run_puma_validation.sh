@@ -39,7 +39,9 @@ fi
 
 python main.py \
   --dataset "${DATASET}" --data_path "${DATA_PATH}" \
-  --variant puma_hybrid --loss pu --drop_ratio "${DROP_RATIO}" \
+  --variant puma_hybrid --loss brl --drop_ratio "${DROP_RATIO}" \
+  --puma_query_loss_weight 0.002 \
+  --nms_radius_m 0.5 \
   --pu_propensity_mode "${PROPENSITY_MODE}" \
   --train_end_ratio 0.8 --eval_start_ratio 0.8 --eval_end_ratio 0.9 \
   --devices "${DEVICES}" --batch_size "${BATCH_SIZE}" \
