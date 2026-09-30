@@ -20,6 +20,8 @@ GT_PATH="${GT_PATH:-$(pwd)/generated_gt/${DATASET}_gt.txt}"
 RESUME_DIR="${RESUME_DIR:-}"
 PROPENSITY_MODE="${PROPENSITY_MODE:-scar}"
 PARALLEL_VIEW_ENCODING="${PARALLEL_VIEW_ENCODING:-0}"
+LOG_INTERVAL="${LOG_INTERVAL:-10}"
+EVAL_EVERY="${EVAL_EVERY:-1}"
 
 extra_args=(--gt_path "${GT_PATH}")
 if [[ "${DROP_RATIO}" != "0" ]]; then
@@ -47,7 +49,8 @@ python main.py \
   --puma_fused_channels "${FUSED_CHANNELS}" \
   --puma_query_channels "${QUERY_CHANNELS}" \
   "${extra_args[@]}" \
-  --skip_initial_test --eval_every 0 --save_score_cache --log_interval 10
+  --skip_initial_test --eval_every "${EVAL_EVERY}" --save_score_cache \
+  --log_interval "${LOG_INTERVAL}"
 
 if [[ -n "${RESUME_DIR}" ]]; then
   cache_path="${RESUME_DIR}/score_cache.npz"

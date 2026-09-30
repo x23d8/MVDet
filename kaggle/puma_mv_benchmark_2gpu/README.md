@@ -28,6 +28,10 @@ complete. It creates partial annotations and evaluator GT under
 stops, attach the previous result directory and set `RESUME_SOURCE`; the full
 optimizer, scheduler, AMP scaler, history, and RNG state are restored.
 
+`LOG_INTERVAL=10` emits train loss/precision/recall every ten batches.
+`EVAL_EVERY=1` prints the complete MODA/MODP/precision/recall validation block
+after every epoch; set it to `0` to evaluate only once at the end and save time.
+
 Select two T4 GPUs in Kaggle. `BATCH_SIZE=2` is a global DataParallel batch,
 therefore each GPU receives one synchronized sample.
 

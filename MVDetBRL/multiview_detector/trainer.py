@@ -189,25 +189,27 @@ class PerspectiveTrainer(BaseTrainer):
                 # print(cyclic_scheduler.last_epoch, optimizer.param_groups[0]['lr'])
                 t1 = time.time()
                 t_epoch = t1 - t0
-                print('Train Epoch: {}, Batch:{}, Loss: {:.6f} '
-                      '(base: {:.6f}, pseudo: {:.6f}, query: {:.6f}, consistency: {:.6f}), '
-                      'prec: {:.1f}%, recall: {:.1f}%, Time: {:.1f} (f{:.3f}+b{:.3f}), maxima: {:.3f}'.format(
-                    epoch, (batch_idx + 1), losses / (batch_idx + 1), base_losses / (batch_idx + 1),
-                    pseudo_losses / (batch_idx + 1), query_losses / (batch_idx + 1),
-                    consistency_losses / (batch_idx + 1),
+                print('Train Epoch: {}, Batch:{}, \tLoss: {:.6f}, '
+                      'Precision: {:.1f}%, Recall: {:.1f}%, \tTime: {:.1f} '
+                      '(f{:.3f}+b{:.3f}), base: {:.6f}, pseudo: {:.6f}, '
+                      'query: {:.6f}, consistency: {:.6f}, maxima: {:.3f}'.format(
+                    epoch, (batch_idx + 1), losses / (batch_idx + 1),
                     precision_s.avg * 100, recall_s.avg * 100,
-                    t_epoch, t_forward / (batch_idx + 1), t_backward / (batch_idx + 1), map_res.max()))
+                    t_epoch, t_forward / (batch_idx + 1), t_backward / (batch_idx + 1),
+                    base_losses / (batch_idx + 1), pseudo_losses / (batch_idx + 1),
+                    query_losses / (batch_idx + 1), consistency_losses / (batch_idx + 1),
+                    map_res.max()))
                 pass
 
         t1 = time.time()
         t_epoch = t1 - t0
-        print('Train Epoch: {}, Batch:{}, Loss: {:.6f} '
-              '(base: {:.6f}, pseudo: {:.6f}, query: {:.6f}, consistency: {:.6f}), '
-              'Precision: {:.1f}%, Recall: {:.1f}%, Time: {:.3f}'.format(
-            epoch, len(data_loader), losses / len(data_loader), base_losses / len(data_loader),
-            pseudo_losses / len(data_loader), query_losses / len(data_loader),
-            consistency_losses / len(data_loader),
-            precision_s.avg * 100, recall_s.avg * 100, t_epoch))
+        print('Train Epoch: {}, Batch:{}, \tLoss: {:.6f}, '
+              'Precision: {:.1f}%, Recall: {:.1f}%, \tTime: {:.3f}, '
+              'base: {:.6f}, pseudo: {:.6f}, query: {:.6f}, consistency: {:.6f}'.format(
+            epoch, len(data_loader), losses / len(data_loader),
+            precision_s.avg * 100, recall_s.avg * 100, t_epoch,
+            base_losses / len(data_loader), pseudo_losses / len(data_loader),
+            query_losses / len(data_loader), consistency_losses / len(data_loader)))
 
         return losses / len(data_loader), precision_s.avg * 100
 
@@ -324,8 +326,8 @@ class PerspectiveTrainer(BaseTrainer):
             print('moda: {:.1f}%, modp: {:.1f}%, precision: {:.1f}%, recall: {:.1f}%'.
                   format(moda, modp, precision, recall))
 
-        print('Test, Loss: {:.6f}, Precision: {:.1f}%, Recall: {:.1f}, \tTime: {:.3f}'.format(
-            losses / (len(data_loader) + 1), precision_s.avg * 100, recall_s.avg * 100, t_epoch))
+        print('Test, Loss: {:.6f}, Precision: {:.1f}%, Recall: {:.1f}%, \tTime: {:.3f}'.format(
+            losses / len(data_loader), precision_s.avg * 100, recall_s.avg * 100, t_epoch))
 
         return losses / len(data_loader), precision_s.avg * 100, moda
 

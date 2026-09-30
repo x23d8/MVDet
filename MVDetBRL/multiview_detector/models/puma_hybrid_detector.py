@@ -95,7 +95,9 @@ class PUMAHybridDetector(PUMADenseDetector):
                 {
                     "dense_map": dense_map,
                     "query_map": query_map,
-                    "query_residual_gate": residual_gate,
+                    # A per-sample view avoids DataParallel's warning when it
+                    # gathers zero-dimensional tensors from multiple GPUs.
+                    "query_residual_gate": residual_gate.expand(images.shape[0]),
                     "query_initial_indices": initial_index,
                     "queries": queries,
                 }

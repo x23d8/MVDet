@@ -19,6 +19,8 @@ NMS_RADIUS_M="${NMS_RADIUS_M:-0.3}"
 SPLIT_ROOT="${SPLIT_ROOT:-${DATA_PATH}/drop_annotations}"
 GT_PATH="${GT_PATH:-$(pwd)/generated_gt/${DATASET}_gt.txt}"
 PARALLEL_VIEW_ENCODING="${PARALLEL_VIEW_ENCODING:-0}"
+LOG_INTERVAL="${LOG_INTERVAL:-10}"
+EVAL_EVERY="${EVAL_EVERY:-1}"
 
 for drop_ratio in ${DROP_RATIOS}; do
   annotation_dir="${SPLIT_ROOT}/visibility_sar/drop_${drop_ratio}/annotations_positions"
@@ -39,7 +41,7 @@ for drop_ratio in ${DROP_RATIOS}; do
       --puma_feature_channels 32 --puma_fused_channels 64 \
       --puma_query_channels 64 "${encoding_args[@]}" --no-cudnn_benchmark \
       --cls_thres "${CLS_THRES}" --nms_radius_m "${NMS_RADIUS_M}" \
-      --skip_initial_test --eval_every 0 \
-      --log_interval 10
+      --skip_initial_test --eval_every "${EVAL_EVERY}" \
+      --log_interval "${LOG_INTERVAL}"
   done
 done

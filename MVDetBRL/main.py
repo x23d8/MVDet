@@ -397,7 +397,7 @@ def main(args):
             epoch % args.eval_every == 0 and epoch != args.epochs
         )
         if should_evaluate:
-            print('Evaluation...')
+            print('Testing...')
             test_loss, test_prec, moda = trainer.test(
                 test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, True
             )
@@ -430,7 +430,7 @@ def main(args):
             'test_moda_s': test_moda_s,
             'args': vars(args),
         })
-    print('Test loaded model...')
+    print('Testing...')
     trainer.test(
         test_loader, os.path.join(logdir, 'test.txt'), train_set.gt_fpath, True,
         score_cache_path=(os.path.join(logdir, 'score_cache.npz')
