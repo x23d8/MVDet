@@ -23,6 +23,7 @@ DROP_RATIOS="${DROP_RATIOS:-0 20 45 60}"
 SEEDS="${SEEDS:-1 2 3}"
 SPLIT_ROOT="${SPLIT_ROOT:-${DATA_PATH}/drop_annotations}"
 GT_PATH="${GT_PATH:-$(pwd)/generated_gt/${DATASET}_gt.txt}"
+PARALLEL_VIEW_ENCODING="${PARALLEL_VIEW_ENCODING:-0}"
 
 for variant in ${VARIANTS}; do
   for drop_ratio in ${DROP_RATIOS}; do
@@ -30,6 +31,11 @@ for variant in ${VARIANTS}; do
       annotation_args=(--gt_path "${GT_PATH}")
       if [[ "${drop_ratio}" != "0" ]]; then
         annotation_args+=(--train_annotation_dir "${SPLIT_ROOT}/drop_${drop_ratio}/annotations_positions")
+      fi
+      if [[ "${PARALLEL_VIEW_ENCODING}" == "1" ]]; then
+        annotation_args+=(--puma_parallel_view_encoding)
+      else
+        annotation_args+=(--no-puma_parallel_view_encoding)
       fi
       python main.py \
         --dataset "${DATASET}" \
@@ -45,7 +51,7 @@ for variant in ${VARIANTS}; do
         --puma_fused_channels "${FUSED_CHANNELS}" \
         --puma_query_channels "${QUERY_CHANNELS}" \
         "${annotation_args[@]}" \
-        --puma_parallel_view_encoding \
+        --no-cudnn_benchmark \
         --cls_thres "${CLS_THRES}" \
         --nms_radius_m "${NMS_RADIUS_M}" \
         --epochs "${EPOCHS}" \

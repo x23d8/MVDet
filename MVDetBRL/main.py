@@ -104,11 +104,10 @@ def main(args):
         random.seed(args.seed)
         np.random.seed(args.seed)
         torch.manual_seed(args.seed)
-        # torch.backends.cudnn.deterministic = True
-        # torch.backends.cudnn.benchmark = False
-        torch.backends.cudnn.benchmark = True
-    else:
-        torch.backends.cudnn.benchmark = True
+    # cuDNN benchmark uses a FIND pass that can request a large temporary
+    # workspace for the flattened seven-camera batch. On Kaggle T4 this can
+    # fail with "FIND was unable to find an engine" before the first step.
+    torch.backends.cudnn.benchmark = bool(args.cudnn_benchmark)
 
     # dataset
     normalize = T.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225))
@@ -497,6 +496,9 @@ if __name__ == '__main__':
                         help='comma-separated CUDA device indices, e.g. 0 or 0,1')
     parser.add_argument('--amp', action='store_true',
                         help='use CUDA mixed precision and dynamic gradient scaling')
+    parser.add_argument('--cudnn_benchmark', action=argparse.BooleanOptionalAction,
+                        default=False,
+                        help='enable cuDNN autotuning; off by default to avoid large FIND workspaces')
     parser.add_argument('--image_height', type=int, default=720,
                         help='network input height; calibration remains in original-image coordinates')
     parser.add_argument('--image_width', type=int, default=1280,

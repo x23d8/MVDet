@@ -19,6 +19,7 @@ SPLIT_ROOT="${SPLIT_ROOT:-${DATA_PATH}/drop_annotations}"
 GT_PATH="${GT_PATH:-$(pwd)/generated_gt/${DATASET}_gt.txt}"
 RESUME_DIR="${RESUME_DIR:-}"
 PROPENSITY_MODE="${PROPENSITY_MODE:-scar}"
+PARALLEL_VIEW_ENCODING="${PARALLEL_VIEW_ENCODING:-0}"
 
 extra_args=(--gt_path "${GT_PATH}")
 if [[ "${DROP_RATIO}" != "0" ]]; then
@@ -28,6 +29,11 @@ fi
 if [[ -n "${RESUME_DIR}" ]]; then
   extra_args+=(--resume "${RESUME_DIR}")
 fi
+if [[ "${PARALLEL_VIEW_ENCODING}" == "1" ]]; then
+  extra_args+=(--puma_parallel_view_encoding)
+else
+  extra_args+=(--no-puma_parallel_view_encoding)
+fi
 
 python main.py \
   --dataset "${DATASET}" --data_path "${DATA_PATH}" \
@@ -36,7 +42,7 @@ python main.py \
   --train_end_ratio 0.8 --eval_start_ratio 0.8 --eval_end_ratio 0.9 \
   --devices "${DEVICES}" --batch_size "${BATCH_SIZE}" \
   --num_workers "${NUM_WORKERS}" --epochs "${EPOCHS}" \
-  --optimizer adamw --lr 2e-4 --amp --puma_parallel_view_encoding \
+  --optimizer adamw --lr 2e-4 --amp --no-cudnn_benchmark \
   --puma_feature_channels "${FEATURE_CHANNELS}" \
   --puma_fused_channels "${FUSED_CHANNELS}" \
   --puma_query_channels "${QUERY_CHANNELS}" \

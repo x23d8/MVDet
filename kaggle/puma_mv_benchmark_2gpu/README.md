@@ -7,7 +7,7 @@ offline. It does not touch the 90--100% test split.
 
 Before pushing the notebook, commit and push the PUMA implementation to the
 configured GitHub branch. Then edit `REPO_URL` and `BRANCH` in the first code
-cell if necessary.
+cell if necessary. The repository default is the `puma` branch.
 
 Modes:
 
@@ -26,3 +26,9 @@ optimizer, scheduler, AMP scaler, history, and RNG state are restored.
 
 Select two T4 GPUs in Kaggle. `BATCH_SIZE=2` is a global DataParallel batch,
 therefore each GPU receives one synchronized sample.
+
+`PARALLEL_VIEW_ENCODING=False` is the safe default. Each GPU still trains one
+sample, but its seven cameras pass through the shared encoder sequentially.
+This avoids the large cuDNN `FIND` workspace that can produce an illegal CUDA
+access on T4 with the 32/64-channel model. The preflight smoke test uses the
+same channel widths and full-view/camera-drop two-pass pattern as training.

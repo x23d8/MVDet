@@ -18,10 +18,15 @@ CLS_THRES="${CLS_THRES:-0.4}"
 NMS_RADIUS_M="${NMS_RADIUS_M:-0.3}"
 SPLIT_ROOT="${SPLIT_ROOT:-${DATA_PATH}/drop_annotations}"
 GT_PATH="${GT_PATH:-$(pwd)/generated_gt/${DATASET}_gt.txt}"
+PARALLEL_VIEW_ENCODING="${PARALLEL_VIEW_ENCODING:-0}"
 
 for drop_ratio in ${DROP_RATIOS}; do
   annotation_dir="${SPLIT_ROOT}/visibility_sar/drop_${drop_ratio}/annotations_positions"
   for seed in ${SEEDS}; do
+    encoding_args=(--no-puma_parallel_view_encoding)
+    if [[ "${PARALLEL_VIEW_ENCODING}" == "1" ]]; then
+      encoding_args=(--puma_parallel_view_encoding)
+    fi
     python main.py \
       --dataset "${DATASET}" --data_path "${DATA_PATH}" \
       --variant puma_hybrid --loss pu --drop_ratio "${drop_ratio}" \
@@ -32,7 +37,7 @@ for drop_ratio in ${DROP_RATIOS}; do
       --num_workers "${NUM_WORKERS}" --epochs "${EPOCHS}" \
       --optimizer adamw --lr 2e-4 --amp \
       --puma_feature_channels 32 --puma_fused_channels 64 \
-      --puma_query_channels 64 --puma_parallel_view_encoding \
+      --puma_query_channels 64 "${encoding_args[@]}" --no-cudnn_benchmark \
       --cls_thres "${CLS_THRES}" --nms_radius_m "${NMS_RADIUS_M}" \
       --skip_initial_test --eval_every 0 \
       --log_interval 10
