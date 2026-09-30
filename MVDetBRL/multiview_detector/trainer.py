@@ -19,7 +19,11 @@ class BaseTrainer(object):
 
 class PerspectiveTrainer(BaseTrainer):
     def __init__(self, model, criterion, logdir, denormalize, cls_thres=0.4, alpha=1.0,
-                 pseudo_loss_weight=0.01):
+                 pseudo_loss_weight=0.01, amp=False, query_criterion=None,
+                 query_loss_weight=0.0, consistency_criterion=None,
+                 consistency_loss_weight=0.0, camera_drop_prob=0.0,
+                 consistency_ramp_epochs=5, nms_radius_grid=20.0,
+                 query_warmup_epochs=3, query_ramp_epochs=5):
         super(BaseTrainer, self).__init__()
         self.model = model
         self.criterion = criterion
@@ -28,6 +32,38 @@ class PerspectiveTrainer(BaseTrainer):
         self.denormalize = denormalize
         self.alpha = alpha
         self.pseudo_loss_weight = float(pseudo_loss_weight)
+        self.amp = bool(amp)
+        self.scaler = torch.amp.GradScaler('cuda', enabled=self.amp)
+        self.query_criterion = query_criterion
+        self.query_loss_weight = float(query_loss_weight)
+        self.query_warmup_epochs = max(int(query_warmup_epochs), 0)
+        self.query_ramp_epochs = max(int(query_ramp_epochs), 1)
+        self.consistency_criterion = consistency_criterion
+        self.consistency_loss_weight = float(consistency_loss_weight)
+        self.camera_drop_prob = float(camera_drop_prob)
+        self.consistency_ramp_epochs = max(int(consistency_ramp_epochs), 1)
+        self.nms_radius_grid = float(nms_radius_grid)
+        if not 0.0 <= self.camera_drop_prob < 1.0:
+            raise ValueError('camera_drop_prob must be in [0,1)')
+
+    def _device(self):
+        return next(self.model.parameters()).device
+
+    @staticmethod
+    def _sample_camera_mask(batch, num_views, drop_probability, device):
+        keep = torch.rand(batch, num_views, device=device) >= drop_probability
+        empty = (~keep).all(dim=1).nonzero(as_tuple=False).flatten()
+        if empty.numel() > 0:
+            replacement = torch.randint(num_views, (empty.numel(),), device=device)
+            keep[empty, replacement] = True
+        # When consistency is requested, make every sample a genuine camera
+        # perturbation rather than occasionally duplicating the full-view pass.
+        if num_views > 1 and drop_probability > 0:
+            full = keep.all(dim=1).nonzero(as_tuple=False).flatten()
+            if full.numel() > 0:
+                removed = torch.randint(num_views, (full.numel(),), device=device)
+                keep[full, removed] = False
+        return keep
 
     def _loss_components(self, map_res, map_gt, imgs_res, imgs_gt, dataset,
                          pseudo_target=None, pseudo_weight=None):
@@ -58,6 +94,8 @@ class PerspectiveTrainer(BaseTrainer):
         losses = 0
         base_losses = 0
         pseudo_losses = 0
+        query_losses = 0
+        consistency_losses = 0
         precision_s, recall_s = AverageMeter(), AverageMeter()
         t0 = time.time()
         t_b = time.time()
@@ -66,19 +104,70 @@ class PerspectiveTrainer(BaseTrainer):
         for batch_idx, batch in enumerate(data_loader):
             data, map_gt, imgs_gt, _ = batch[:4]
             pseudo_target, pseudo_weight = batch[4:6] if len(batch) >= 6 else (None, None)
+            data = data.to(self._device(), non_blocking=True)
             optimizer.zero_grad()
-            map_res, imgs_res = self.model(data)
-            t_f = time.time()
-            t_forward += t_f - t_b
-            base_loss, pseudo_loss = self._loss_components(
-                map_res, map_gt, imgs_res, imgs_gt, data_loader.dataset,
-                pseudo_target, pseudo_weight)
-            loss = base_loss + pseudo_loss
-            loss.backward()
-            optimizer.step()
+            use_consistency = (
+                self.consistency_criterion is not None
+                and self.consistency_loss_weight > 0
+                and self.camera_drop_prob > 0
+            )
+            teacher_map = None
+            camera_mask = None
+            if use_consistency:
+                # Same-weight full-view teacher. Evaluation mode avoids a
+                # second BatchNorm update; no_grad means only the dropped-view
+                # student graph is retained for backward.
+                self.model.eval()
+                with torch.no_grad(), torch.autocast(
+                    device_type='cuda', dtype=torch.float16, enabled=self.amp
+                ):
+                    teacher_map, _ = self.model(data)
+                self.model.train()
+                camera_mask = self._sample_camera_mask(
+                    data.shape[0], data.shape[1], self.camera_drop_prob, data.device)
+            with torch.autocast(device_type='cuda', dtype=torch.float16, enabled=self.amp):
+                if self.query_criterion is not None and self.query_loss_weight > 0:
+                    map_res, imgs_res, auxiliary = self.model(
+                        data, return_aux=True, camera_mask=camera_mask)
+                else:
+                    if camera_mask is None:
+                        map_res, imgs_res = self.model(data)
+                    else:
+                        map_res, imgs_res = self.model(data, camera_mask=camera_mask)
+                    auxiliary = None
+                t_f = time.time()
+                t_forward += t_f - t_b
+                base_loss, pseudo_loss = self._loss_components(
+                    map_res, map_gt, imgs_res, imgs_gt, data_loader.dataset,
+                    pseudo_target, pseudo_weight)
+                query_loss = map_res.new_zeros(())
+                if auxiliary is not None:
+                    base_model = self.model.module if isinstance(
+                        self.model, torch.nn.DataParallel) else self.model
+                    query_progress = max(epoch - self.query_warmup_epochs, 0)
+                    query_ramp = min(query_progress / self.query_ramp_epochs, 1.0)
+                    if query_ramp > 0:
+                        query_loss = (
+                            self.query_loss_weight * query_ramp
+                            * self.query_criterion(
+                                auxiliary['queries'], map_gt, base_model.bev_xy_m)
+                        )
+                consistency_loss = map_res.new_zeros(())
+                if use_consistency:
+                    ramp = min(float(epoch) / self.consistency_ramp_epochs, 1.0)
+                    consistency_loss = (
+                        self.consistency_loss_weight * ramp
+                        * self.consistency_criterion(map_res, teacher_map)
+                    )
+                loss = base_loss + pseudo_loss + query_loss + consistency_loss
+            self.scaler.scale(loss).backward()
+            self.scaler.step(optimizer)
+            self.scaler.update()
             losses += loss.item()
             base_losses += base_loss.item()
             pseudo_losses += pseudo_loss.item()
+            query_losses += query_loss.item()
+            consistency_losses += consistency_loss.item()
             pred = (map_res > self.cls_thres).int().to(map_gt.device)
             true_positive = (pred.eq(map_gt) * pred.eq(1)).sum().item()
             false_positive = pred.sum().item() - true_positive
@@ -100,44 +189,66 @@ class PerspectiveTrainer(BaseTrainer):
                 # print(cyclic_scheduler.last_epoch, optimizer.param_groups[0]['lr'])
                 t1 = time.time()
                 t_epoch = t1 - t0
-                print('Train Epoch: {}, Batch:{}, Loss: {:.6f} (base: {:.6f}, pseudo: {:.6f}), '
+                print('Train Epoch: {}, Batch:{}, Loss: {:.6f} '
+                      '(base: {:.6f}, pseudo: {:.6f}, query: {:.6f}, consistency: {:.6f}), '
                       'prec: {:.1f}%, recall: {:.1f}%, Time: {:.1f} (f{:.3f}+b{:.3f}), maxima: {:.3f}'.format(
                     epoch, (batch_idx + 1), losses / (batch_idx + 1), base_losses / (batch_idx + 1),
-                    pseudo_losses / (batch_idx + 1), precision_s.avg * 100, recall_s.avg * 100,
-                    t_epoch, t_forward / batch_idx, t_backward / batch_idx, map_res.max()))
+                    pseudo_losses / (batch_idx + 1), query_losses / (batch_idx + 1),
+                    consistency_losses / (batch_idx + 1),
+                    precision_s.avg * 100, recall_s.avg * 100,
+                    t_epoch, t_forward / (batch_idx + 1), t_backward / (batch_idx + 1), map_res.max()))
                 pass
 
         t1 = time.time()
         t_epoch = t1 - t0
-        print('Train Epoch: {}, Batch:{}, Loss: {:.6f} (base: {:.6f}, pseudo: {:.6f}), '
+        print('Train Epoch: {}, Batch:{}, Loss: {:.6f} '
+              '(base: {:.6f}, pseudo: {:.6f}, query: {:.6f}, consistency: {:.6f}), '
               'Precision: {:.1f}%, Recall: {:.1f}%, Time: {:.3f}'.format(
             epoch, len(data_loader), losses / len(data_loader), base_losses / len(data_loader),
-            pseudo_losses / len(data_loader), precision_s.avg * 100, recall_s.avg * 100, t_epoch))
+            pseudo_losses / len(data_loader), query_losses / len(data_loader),
+            consistency_losses / len(data_loader),
+            precision_s.avg * 100, recall_s.avg * 100, t_epoch))
 
         return losses / len(data_loader), precision_s.avg * 100
 
-    def test(self, data_loader, res_fpath=None, gt_fpath=None, visualize=False):
+    def test(self, data_loader, res_fpath=None, gt_fpath=None, visualize=False,
+             score_cache_path=None):
         self.model.eval()
         losses = 0
         precision_s, recall_s = AverageMeter(), AverageMeter()
         all_res_list = []
+        evaluated_frames = []
+        cached_maps = []
         t0 = time.time()
         if res_fpath is not None:
             assert gt_fpath is not None
         for batch_idx, batch in enumerate(data_loader):
             data, map_gt, imgs_gt, frame = batch[:4]
+            evaluated_frames.extend(int(value) for value in frame.reshape(-1).tolist())
+            data = data.to(self._device(), non_blocking=True)
             with torch.no_grad():
                 map_res, imgs_res = self.model(data)
+            if score_cache_path is not None:
+                cached_maps.append(map_res.detach().float().cpu().numpy()[:, 0])
             if res_fpath is not None:
-                map_grid_res = map_res.detach().cpu().squeeze()
-                v_s = map_grid_res[map_grid_res > self.cls_thres].unsqueeze(1)
-                grid_ij = (map_grid_res > self.cls_thres).nonzero()
-                if data_loader.dataset.base.indexing == 'xy':
-                    grid_xy = grid_ij[:, [1, 0]]
-                else:
-                    grid_xy = grid_ij
-                all_res_list.append(torch.cat([torch.ones_like(v_s) * frame, grid_xy.float() *
-                                               data_loader.dataset.grid_reduce, v_s], dim=1))
+                batch_maps = map_res.detach().cpu()
+                for sample_index in range(batch_maps.shape[0]):
+                    map_grid_res = batch_maps[sample_index, 0]
+                    selected = map_grid_res > self.cls_thres
+                    v_s = map_grid_res[selected].unsqueeze(1)
+                    grid_ij = selected.nonzero()
+                    if data_loader.dataset.base.indexing == 'xy':
+                        grid_xy = grid_ij[:, [1, 0]]
+                    else:
+                        grid_xy = grid_ij
+                    frame_column = torch.full_like(
+                        v_s, int(frame.reshape(-1)[sample_index].item())
+                    )
+                    all_res_list.append(torch.cat([
+                        frame_column,
+                        grid_xy.float() * data_loader.dataset.grid_reduce,
+                        v_s,
+                    ], dim=1))
 
             loss = self._loss(map_res, map_gt, imgs_res, imgs_gt, data_loader.dataset)
             losses += loss.item()
@@ -174,6 +285,15 @@ class PerspectiveTrainer(BaseTrainer):
             foot_cam_result.save(os.path.join(self.logdir, 'cam1_foot.jpg'))
 
         moda = 0
+        if score_cache_path is not None:
+            os.makedirs(os.path.dirname(os.path.abspath(score_cache_path)), exist_ok=True)
+            np.savez_compressed(
+                score_cache_path,
+                maps=np.concatenate(cached_maps, axis=0),
+                frames=np.asarray(evaluated_frames, dtype=np.int64),
+                grid_reduce=np.asarray(data_loader.dataset.grid_reduce),
+                indexing=np.asarray(data_loader.dataset.base.indexing),
+            )
         if res_fpath is not None:
             if len(all_res_list) == 0:
                 all_res = torch.zeros((0, 4))
@@ -185,14 +305,17 @@ class PerspectiveTrainer(BaseTrainer):
                 for frame in np.unique(all_res[:, 0].numpy()):
                     res = all_res[all_res[:, 0] == frame, :]
                     positions, scores = res[:, 1:3], res[:, 3]
-                    ids, count = nms(positions, scores, 20, np.inf)
+                    ids, count = nms(
+                        positions, scores, self.nms_radius_grid, np.inf
+                    )
                     if count > 0:
                         res_list.append(torch.cat([torch.ones([count, 1]) * frame, positions[ids[:count], :]], dim=1))
             res_list = torch.cat(res_list, dim=0).numpy() if res_list else np.empty([0, 3])
             np.savetxt(res_fpath, res_list, '%d')
 
-            recall, precision, moda, modp = evaluate(os.path.abspath(res_fpath), os.path.abspath(gt_fpath),
-                                                     data_loader.dataset.base.__name__)
+            recall, precision, moda, modp = evaluate(
+                os.path.abspath(res_fpath), os.path.abspath(gt_fpath),
+                data_loader.dataset.base.__name__, frames=evaluated_frames)
 
             # If you want to use the unofiicial python evaluation tool for convenient purposes.
             # recall, precision, modp, moda = python_eval(os.path.abspath(res_fpath), os.path.abspath(gt_fpath),

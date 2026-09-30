@@ -29,7 +29,7 @@ def CLEAR_MOD_HUN(gt, det):
     td = 50 / 2.5  # distance threshold
 
     F = int(max(gt[:, 0])) + 1
-    N = int(max(det[:, 1])) + 1
+    N = int(max(det[:, 1])) + 1 if det.size else 0
     Fgt = int(max(gt[:, 0])) + 1
     Ngt = int(max(gt[:, 1])) + 1
 
@@ -90,11 +90,16 @@ def CLEAR_MOD_HUN(gt, det):
         fp[0][t - 1] = Nt - c[0][t - 1]
         m[0][t - 1] = g[0][t - 1] - c[0][t - 1]
 
-    MODP = sum(1 - distances[distances < td] / td) / np.sum(c) * 100 if sum(
-        1 - distances[distances < td] / td) / np.sum(c) * 100 > 0 else 0
-    MODA = (1 - ((np.sum(m) + np.sum(fp)) / np.sum(g))) * 100 if (1 - (
-            (np.sum(m) + np.sum(fp)) / np.sum(g))) * 100 > 0 else 0
-    recall = np.sum(c) / np.sum(g) * 100 if np.sum(c) / np.sum(g) * 100 > 0 else 0
-    precision = np.sum(c) / (np.sum(fp) + np.sum(c)) * 100 if np.sum(c) / (np.sum(fp) + np.sum(c)) * 100 > 0 else 0
+    matches = np.sum(c)
+    false_positives = np.sum(fp)
+    misses = np.sum(m)
+    ground_truth = np.sum(g)
+    localization = np.sum(1 - distances[distances < td] / td)
+    MODP = max(float(localization / matches * 100), 0.0) if matches > 0 else 0
+    MODA = max(float((1 - (misses + false_positives) / ground_truth) * 100), 0.0) \
+        if ground_truth > 0 else 0
+    recall = max(float(matches / ground_truth * 100), 0.0) if ground_truth > 0 else 0
+    detected_total = false_positives + matches
+    precision = max(float(matches / detected_total * 100), 0.0) if detected_total > 0 else 0
 
     return recall, precision, MODA, MODP

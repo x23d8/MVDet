@@ -1,0 +1,16 @@
+{
+  "id": "lee735/puma-mv-benchmark-2gpu",
+  "title": "PUMA-MV Partial Annotation Benchmark 2GPU",
+  "code_file": "puma_mv_benchmark_2gpu.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [
+    "lee735/thesis-dataset-new"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

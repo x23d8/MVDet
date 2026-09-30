@@ -18,7 +18,13 @@ import numpy as np
 #     return recall, precision, moda, modp
 
 
-def evaluate(res_fpath, gt_fpath, dataset='wildtrack'):
+def evaluate(res_fpath, gt_fpath, dataset='wildtrack', frames=None):
+    # The MATLAB wrapper infers a fixed split from the result filename and
+    # cannot represent arbitrary validation ranges. Use the corrected Python
+    # evaluator whenever the caller supplies the authoritative frame list.
+    if frames is not None:
+        from multiview_detector.evaluation.pyeval.evaluateDetection import evaluateDetection_py
+        return evaluateDetection_py(res_fpath, gt_fpath, dataset, frames=frames)
     try:
         import matlab.engine
 

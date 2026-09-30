@@ -3,7 +3,7 @@
 Simulate missing-instance annotations for Wildtrack / MultiviewX.
 
 Example:
-    python simulate_dropped_anotations.py -d Wildtrack -r ./Data_temp -s drop20 drop45 drop60 --seed 1
+    python simulate_dropped_annotations.py -d Wildtrack -r ./Data_temp -s drop20 drop45 drop60 --seed 1
 
 Writes JSON-only folders under:
     {root}/{dataset}/drop_annotations/drop_20/annotations_positions/
@@ -70,12 +70,74 @@ def split_instances_by_ratio(
     return observed, hidden
 
 
-def simulate(dataset, root, train_ratio, settings, seed=1):
+def _view_statistics(person: dict, num_cam: int) -> Tuple[int, float]:
+    visible_areas = []
+    for view in person.get("views", [])[:num_cam]:
+        xmin, xmax = view.get("xmin", -1), view.get("xmax", -1)
+        ymin, ymax = view.get("ymin", -1), view.get("ymax", -1)
+        if min(xmin, xmax, ymin, ymax) < 0 or xmax <= xmin or ymax <= ymin:
+            continue
+        visible_areas.append(float((xmax - xmin) * (ymax - ymin)))
+    mean_area = float(np.mean(visible_areas)) if visible_areas else 0.0
+    return len(visible_areas), mean_area
+
+
+def split_instances_visibility_sar(
+    persons: List[dict],
+    drop_ratio: float,
+    frame_id: int,
+    num_cam: int,
+    seed: int = 1,
+    visibility_strength: float = 2.0,
+    scale_strength: float = 1.0,
+) -> Tuple[List[dict], List[dict]]:
+    """Drop difficult people more often while preserving the target count.
+
+    This creates a controlled Selected-At-Random split: selection depends on
+    observable visibility and projected scale rather than being uniform.
+    """
+    n = len(persons)
+    n_drop = max(0, min(int(round(n * drop_ratio)), n))
+    if n_drop == 0:
+        return list(persons), []
+    statistics = [_view_statistics(person, num_cam) for person in persons]
+    visible = np.asarray([item[0] for item in statistics], dtype=np.float64)
+    area = np.asarray([item[1] for item in statistics], dtype=np.float64)
+    visibility_difficulty = 1.0 - visible / max(float(num_cam), 1.0)
+    positive_area = area[area > 0]
+    area_scale = np.median(positive_area) if positive_area.size else 1.0
+    scale_difficulty = 1.0 / (1.0 + area / max(area_scale, 1.0))
+    log_weight = (
+        visibility_strength * visibility_difficulty
+        + scale_strength * scale_difficulty
+    )
+    weight = np.exp(log_weight - log_weight.max())
+    weight = weight / weight.sum()
+    rng = np.random.default_rng(
+        np.random.SeedSequence([seed, frame_id, int(round(drop_ratio * 1000)), 7919])
+    )
+    drop_idx = set(rng.choice(n, size=n_drop, replace=False, p=weight).tolist())
+    return (
+        [person for index, person in enumerate(persons) if index not in drop_idx],
+        [person for index, person in enumerate(persons) if index in drop_idx],
+    )
+
+
+def simulate(dataset, root, train_ratio, settings, seed=1, mechanism="scar",
+             visibility_strength=2.0, scale_strength=1.0, output_root=None):
     meta = DATASET_META[dataset]
     num_frame = meta["num_frame"]
     train_cutoff = int(num_frame * train_ratio)
 
-    dataset_root = os.path.join(root, dataset)
+    # Accept both the historical parent directory (root/Wildtrack) and an
+    # explicit dataset root. Kaggle/Hugging Face commonly add different
+    # wrapper directory names around the same Wildtrack layout.
+    nested_root = os.path.join(root, dataset)
+    dataset_root = (
+        nested_root
+        if os.path.isdir(os.path.join(nested_root, "annotations_positions"))
+        else root
+    )
     annotations_dir = os.path.join(dataset_root, "annotations_positions")
     if not os.path.isdir(annotations_dir):
         raise FileNotFoundError(f"Annotations directory not found: {annotations_dir}")
@@ -84,14 +146,16 @@ def simulate(dataset, root, train_ratio, settings, seed=1):
     if not files:
         raise FileNotFoundError(f"No .json files found in {annotations_dir}")
 
-    drop_root = os.path.join(dataset_root, DROP_ANNOTATIONS_DIR)
+    drop_root = os.path.join(output_root or dataset_root, DROP_ANNOTATIONS_DIR)
     os.makedirs(drop_root, exist_ok=True)
     all_stats: Dict[str, dict] = {}
 
     for setting in settings:
         folder_name, drop_ratio = DROP_SETTINGS[setting]
         # JSON-only: {root}/{dataset}/drop_annotations/drop_XX/
-        setting_root = os.path.join(drop_root, folder_name)
+        setting_root = os.path.join(
+            drop_root, folder_name if mechanism == "scar" else os.path.join(mechanism, folder_name)
+        )
         observed_dir = os.path.join(setting_root, "annotations_positions")
         hidden_dir = os.path.join(setting_root, "hidden_annotations_positions")
         os.makedirs(observed_dir, exist_ok=True)
@@ -102,6 +166,8 @@ def simulate(dataset, root, train_ratio, settings, seed=1):
         train_frames = 0
         test_frames = 0
         per_frame_drop_ratios = []
+        observed_visibility = []
+        hidden_visibility = []
 
         for fname in files:
             src_path = os.path.join(annotations_dir, fname)
@@ -111,14 +177,26 @@ def simulate(dataset, root, train_ratio, settings, seed=1):
 
             is_train = frame_id < train_cutoff
             if is_train:
-                observed, hidden = split_instances_by_ratio(
-                    persons, drop_ratio, frame_id, seed=seed
-                )
+                if mechanism == "scar":
+                    observed, hidden = split_instances_by_ratio(
+                        persons, drop_ratio, frame_id, seed=seed
+                    )
+                else:
+                    observed, hidden = split_instances_visibility_sar(
+                        persons, drop_ratio, frame_id, meta["num_cam"], seed,
+                        visibility_strength, scale_strength,
+                    )
                 train_frames += 1
                 total_train_instances += len(persons)
                 dropped_train_instances += len(hidden)
                 per_frame_drop_ratios.append(
                     (len(hidden) / len(persons)) if persons else 0.0
+                )
+                observed_visibility.extend(
+                    _view_statistics(person, meta["num_cam"])[0] for person in observed
+                )
+                hidden_visibility.extend(
+                    _view_statistics(person, meta["num_cam"])[0] for person in hidden
                 )
             else:
                 observed = persons
@@ -142,6 +220,7 @@ def simulate(dataset, root, train_ratio, settings, seed=1):
         stats = {
             "dataset": dataset,
             "setting": setting,
+            "mechanism": mechanism,
             "folder": folder_name,
             "target_drop_ratio_per_frame": drop_ratio,
             "seed": seed,
@@ -155,6 +234,12 @@ def simulate(dataset, root, train_ratio, settings, seed=1):
             "train_instances_hidden": dropped_train_instances,
             "mean_per_frame_drop_ratio": mean_per_frame_drop,
             "global_drop_ratio": global_drop_ratio,
+            "mean_visible_cameras_observed": (
+                float(np.mean(observed_visibility)) if observed_visibility else None
+            ),
+            "mean_visible_cameras_hidden": (
+                float(np.mean(hidden_visibility)) if hidden_visibility else None
+            ),
         }
         all_stats[setting] = stats
         save_json(os.path.join(setting_root, "stats.json"), stats)
@@ -167,7 +252,9 @@ def simulate(dataset, root, train_ratio, settings, seed=1):
             f"({100 * global_drop_ratio:.2f}% dropped) -> {setting_root}"
         )
 
-    summary_path = os.path.join(drop_root, "summary.json")
+    summary_path = os.path.join(
+        drop_root, "summary.json" if mechanism == "scar" else f"summary_{mechanism}.json"
+    )
     save_json(summary_path, all_stats)
     print(f"\nSaved summary: {summary_path}")
 
@@ -182,7 +269,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "-r", "--root", type=str, default="./Data_temp",
-        help="Folder containing dataset (e.g. ./Data_temp)",
+        help="Dataset root or a parent containing Wildtrack/MultiviewX",
     )
     parser.add_argument("--train-ratio", type=float, default=0.9)
     parser.add_argument(
@@ -190,6 +277,16 @@ if __name__ == "__main__":
         choices=list(DROP_SETTINGS.keys()),
     )
     parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument(
+        "--mechanism", choices=["scar", "visibility_sar"], default="scar",
+        help="uniform random missingness or visibility/scale-biased missingness",
+    )
+    parser.add_argument("--visibility-strength", type=float, default=2.0)
+    parser.add_argument("--scale-strength", type=float, default=1.0)
+    parser.add_argument(
+        "--output-root", type=str, default=None,
+        help="Writable output parent; drop_annotations is created below it",
+    )
     args = parser.parse_args()
 
     simulate(
@@ -198,4 +295,8 @@ if __name__ == "__main__":
         train_ratio=args.train_ratio,
         settings=args.settings,
         seed=args.seed,
+        mechanism=args.mechanism,
+        visibility_strength=args.visibility_strength,
+        scale_strength=args.scale_strength,
+        output_root=args.output_root,
     )

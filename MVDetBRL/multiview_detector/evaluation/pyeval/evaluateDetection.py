@@ -1,9 +1,10 @@
 ### python version of matlab evaluation toolkit
+import os
 import numpy as np
 from multiview_detector.evaluation.pyeval.CLEAR_MOD_HUN import CLEAR_MOD_HUN
 
 
-def evaluateDetection_py(res_fpath, gt_fpath, dataset_name):
+def evaluateDetection_py(res_fpath, gt_fpath, dataset_name, frames=None):
     """
     This is simply the python translation of a MATLAB　Evaluation tool used to evaluate detection result created by P. Dollar.
     Translated by Zicheng Duan
@@ -50,7 +51,7 @@ def evaluateDetection_py(res_fpath, gt_fpath, dataset_name):
     #         frames = 399
 
     gtRaw = np.loadtxt(gt_fpath)
-    detRaw = np.loadtxt(res_fpath)
+    detRaw = np.loadtxt(res_fpath) if os.path.getsize(res_fpath) > 0 else np.zeros((0, 3))
 
     # np.loadtxt returns 1D when the file has a single row
     if gtRaw.size == 0:
@@ -58,19 +59,16 @@ def evaluateDetection_py(res_fpath, gt_fpath, dataset_name):
     elif gtRaw.ndim == 1:
         gtRaw = gtRaw.reshape(1, -1)
     if detRaw.size == 0:
-        return 0, 0, 0, 0  # recall, precision, moda, modp
+        detRaw = np.zeros((0, 3))
     elif detRaw.ndim == 1:
         detRaw = detRaw.reshape(1, -1)
 
-    frames = np.unique(detRaw[:, 0])
-    frame_ctr = 0
-    gt_flag = True
-    det_flag = True
-
-    gtAllMatrix = 0
-    detAllMatrix = 0
-
-    for t in frames:
+    if frames is None:
+        frames = np.unique(detRaw[:, 0])
+    frames = [int(frame) for frame in frames]
+    gt_rows = []
+    det_rows = []
+    for frame_ctr, t in enumerate(frames):
         idxs = np.where(gtRaw[:, 0] == t)
         idx = idxs[0]
         idx_len = len(idx)
@@ -80,11 +78,8 @@ def evaluateDetection_py(res_fpath, gt_fpath, dataset_name):
         tmp_arr[:, 2] = np.array([j for j in gtRaw[idx, 1]])
         tmp_arr[:, 3] = np.array([k for k in gtRaw[idx, 2]])
 
-        if gt_flag:
-            gtAllMatrix = tmp_arr
-            gt_flag = False
-        else:
-            gtAllMatrix = np.concatenate((gtAllMatrix, tmp_arr), axis=0)
+        if idx_len:
+            gt_rows.append(tmp_arr)
         idxs = np.where(detRaw[:, 0] == t)
         idx = idxs[0]
         idx_len = len(idx)
@@ -94,12 +89,12 @@ def evaluateDetection_py(res_fpath, gt_fpath, dataset_name):
         tmp_arr[:, 2] = np.array([j for j in detRaw[idx, 1]])
         tmp_arr[:, 3] = np.array([k for k in detRaw[idx, 2]])
 
-        if det_flag:
-            detAllMatrix = tmp_arr
-            det_flag = False
-        else:
-            detAllMatrix = np.concatenate((detAllMatrix, tmp_arr), axis=0)
-        frame_ctr += 1
+        if idx_len:
+            det_rows.append(tmp_arr)
+    gtAllMatrix = np.concatenate(gt_rows, axis=0) if gt_rows else np.zeros((0, 4))
+    detAllMatrix = np.concatenate(det_rows, axis=0) if det_rows else np.zeros((0, 4))
+    if gtAllMatrix.size == 0:
+        return 0, 0, 0, 0
     recall, precision, MODA, MODP = CLEAR_MOD_HUN(gtAllMatrix, detAllMatrix)
     return recall, precision, MODA, MODP
 

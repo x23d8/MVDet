@@ -13,7 +13,8 @@ class frameDataset(VisionDataset):
     def __init__(self, base, train=True, transform=ToTensor(), target_transform=ToTensor(),
                  reID=False, grid_reduce=4, img_reduce=4, train_ratio=0.9, force_download=True,
                  drop_ratio=0, pseudo_cache=None, pseudo_conf_threshold=0.2,
-                 pseudo_sigma_m=0.5, pseudo_suppress_radius_m=1.0):
+                 pseudo_sigma_m=0.5, pseudo_suppress_radius_m=1.0,
+                 annotation_dir=None, frame_range=None, gt_fpath=None):
         super().__init__(base.root, transform=transform, target_transform=target_transform)
 
         map_sigma, map_kernel_size = 20 / grid_reduce, 20
@@ -39,7 +40,12 @@ class frameDataset(VisionDataset):
                 raise ValueError("Pseudo cache must contain a 'detections' object keyed by frame and camera")
 
         # Images/calib stay under base.root; labels can come from a drop_* folder.
-        if drop_ratio > 0:
+        if annotation_dir is not None:
+            annotation_dir = os.path.expanduser(annotation_dir)
+            self.anno_dir = annotation_dir if os.path.isabs(annotation_dir) else os.path.join(
+                self.root, annotation_dir
+            )
+        elif drop_ratio > 0:
             drop_tag = int(drop_ratio)  # 20.0 -> drop_20 (not drop_20.0)
             self.anno_dir = os.path.join(
                 self.root, 'drop_annotations', f'drop_{drop_tag}', 'annotations_positions'
@@ -49,7 +55,9 @@ class frameDataset(VisionDataset):
         if not os.path.isdir(self.anno_dir):
             raise FileNotFoundError(f'Annotation directory not found: {self.anno_dir}')
 
-        if train:
+        if frame_range is not None:
+            frame_range = range(*frame_range) if isinstance(frame_range, tuple) else frame_range
+        elif train:
             frame_range = range(0, int(self.num_frame * train_ratio))
         else:
             frame_range = range(int(self.num_frame * train_ratio), self.num_frame)
@@ -59,7 +67,7 @@ class frameDataset(VisionDataset):
         self.imgs_head_foot_gt = {}
         self.download(frame_range)
 
-        self.gt_fpath = os.path.join(self.root, 'gt.txt')
+        self.gt_fpath = os.path.abspath(gt_fpath) if gt_fpath else os.path.join(self.root, 'gt.txt')
         if not os.path.exists(self.gt_fpath) or force_download:
             self.prepare_gt()
 
