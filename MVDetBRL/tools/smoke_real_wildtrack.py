@@ -93,8 +93,23 @@ def main():
             loss = loss + 0.02 * consistency_component
     loss.backward()
     valid = auxiliary["valid_samples"].any(dim=(2, 3, 4, 5, 6))[0]
-    if not valid.all():
-        raise RuntimeError(f"projection produced no valid BEV samples for cameras: {(~valid).nonzero()}")
+    active_cameras = (
+        camera_mask[0]
+        if camera_mask is not None
+        else torch.ones_like(valid, dtype=torch.bool)
+    )
+    missing_active = active_cameras & ~valid
+    if missing_active.any():
+        raise RuntimeError(
+            "projection produced no valid BEV samples for active cameras: "
+            f"{missing_active.nonzero()}"
+        )
+    unexpected_dropped = ~active_cameras & valid
+    if unexpected_dropped.any():
+        raise RuntimeError(
+            "camera masking failed; dropped cameras still produced valid samples: "
+            f"{unexpected_dropped.nonzero()}"
+        )
     if not torch.isfinite(prediction).all() or not torch.isfinite(loss):
         raise RuntimeError("non-finite prediction/loss")
     print({
@@ -111,6 +126,7 @@ def main():
         "parallel_view_encoding": args.parallel_view_encoding,
         "channels": [args.feature_channels, args.fused_channels, args.query_channels],
         "query_components": query_loss.last_components,
+        "active_camera_mask": active_cameras.tolist(),
         "valid_camera_samples": valid.tolist(),
         "peak_memory_mib": int(torch.cuda.max_memory_allocated() / (1024 ** 2)),
     })
