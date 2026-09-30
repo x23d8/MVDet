@@ -9,6 +9,10 @@ Before pushing the notebook, commit and push the PUMA implementation to the
 configured GitHub branch. Then edit `REPO_URL` and `BRANCH` in the first code
 cell if necessary. The repository default is the `puma` branch.
 
+`DATASET_ROOT` defaults to
+`/kaggle/input/datasets/lee735/thesis-dataset-new/Wildtrack/Wildtrack`.
+Set it to an empty string to auto-discover Wildtrack below `/kaggle/input`.
+
 Modes:
 
 - `smoke`: one real seven-camera AMP forward/backward step;
