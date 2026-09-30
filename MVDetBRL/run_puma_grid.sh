@@ -16,6 +16,8 @@ NUM_WORKERS="${NUM_WORKERS:-4}"
 FEATURE_CHANNELS="${FEATURE_CHANNELS:-32}"
 FUSED_CHANNELS="${FUSED_CHANNELS:-64}"
 QUERY_CHANNELS="${QUERY_CHANNELS:-64}"
+LOSS="${LOSS:-pu}"
+QUERY_LOSS_WEIGHT="${QUERY_LOSS_WEIGHT:-0.002}"
 CLS_THRES="${CLS_THRES:-0.4}"
 NMS_RADIUS_M="${NMS_RADIUS_M:-0.3}"
 VARIANTS="${VARIANTS:-puma_dense puma_hybrid}"
@@ -43,7 +45,8 @@ for variant in ${VARIANTS}; do
         --dataset "${DATASET}" \
         --data_path "${DATA_PATH}" \
         --variant "${variant}" \
-        --loss pu \
+        --loss "${LOSS}" \
+        --puma_query_loss_weight "${QUERY_LOSS_WEIGHT}" \
         --drop_ratio "${drop_ratio}" \
         --seed "${seed}" \
         --devices "${DEVICES}" \

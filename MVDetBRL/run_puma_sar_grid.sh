@@ -12,6 +12,11 @@ DEVICES="${DEVICES:-0,1}"
 BATCH_SIZE="${BATCH_SIZE:-2}"
 EPOCHS="${EPOCHS:-30}"
 NUM_WORKERS="${NUM_WORKERS:-4}"
+FEATURE_CHANNELS="${FEATURE_CHANNELS:-32}"
+FUSED_CHANNELS="${FUSED_CHANNELS:-64}"
+QUERY_CHANNELS="${QUERY_CHANNELS:-64}"
+LOSS="${LOSS:-pu}"
+QUERY_LOSS_WEIGHT="${QUERY_LOSS_WEIGHT:-0.002}"
 DROP_RATIOS="${DROP_RATIOS:-20 45 60}"
 SEEDS="${SEEDS:-1 2 3}"
 CLS_THRES="${CLS_THRES:-0.4}"
@@ -31,15 +36,18 @@ for drop_ratio in ${DROP_RATIOS}; do
     fi
     python main.py \
       --dataset "${DATASET}" --data_path "${DATA_PATH}" \
-      --variant puma_hybrid --loss pu --drop_ratio "${drop_ratio}" \
+      --variant puma_hybrid --loss "${LOSS}" --drop_ratio "${drop_ratio}" \
+      --puma_query_loss_weight "${QUERY_LOSS_WEIGHT}" \
       --pu_propensity_mode sar \
       --train_annotation_dir "${annotation_dir}" \
       --gt_path "${GT_PATH}" \
       --seed "${seed}" --devices "${DEVICES}" --batch_size "${BATCH_SIZE}" \
       --num_workers "${NUM_WORKERS}" --epochs "${EPOCHS}" \
       --optimizer adamw --lr 2e-4 --amp \
-      --puma_feature_channels 32 --puma_fused_channels 64 \
-      --puma_query_channels 64 "${encoding_args[@]}" --no-cudnn_benchmark \
+      --puma_feature_channels "${FEATURE_CHANNELS}" \
+      --puma_fused_channels "${FUSED_CHANNELS}" \
+      --puma_query_channels "${QUERY_CHANNELS}" \
+      "${encoding_args[@]}" --no-cudnn_benchmark \
       --cls_thres "${CLS_THRES}" --nms_radius_m "${NMS_RADIUS_M}" \
       --skip_initial_test --eval_every "${EVAL_EVERY}" \
       --log_interval "${LOG_INTERVAL}"

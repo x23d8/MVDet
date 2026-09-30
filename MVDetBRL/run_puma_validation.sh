@@ -15,6 +15,10 @@ DROP_RATIO="${DROP_RATIO:-60}"
 FEATURE_CHANNELS="${FEATURE_CHANNELS:-32}"
 FUSED_CHANNELS="${FUSED_CHANNELS:-64}"
 QUERY_CHANNELS="${QUERY_CHANNELS:-64}"
+LOSS="${LOSS:-pu}"
+QUERY_LOSS_WEIGHT="${QUERY_LOSS_WEIGHT:-0.002}"
+CLS_THRES="${CLS_THRES:-0.4}"
+NMS_RADIUS_M="${NMS_RADIUS_M:-0.3}"
 SPLIT_ROOT="${SPLIT_ROOT:-${DATA_PATH}/drop_annotations}"
 GT_PATH="${GT_PATH:-$(pwd)/generated_gt/${DATASET}_gt.txt}"
 RESUME_DIR="${RESUME_DIR:-}"
@@ -39,9 +43,9 @@ fi
 
 python main.py \
   --dataset "${DATASET}" --data_path "${DATA_PATH}" \
-  --variant puma_hybrid --loss brl --drop_ratio "${DROP_RATIO}" \
-  --puma_query_loss_weight 0.002 \
-  --nms_radius_m 0.5 \
+  --variant puma_hybrid --loss "${LOSS}" --drop_ratio "${DROP_RATIO}" \
+  --puma_query_loss_weight "${QUERY_LOSS_WEIGHT}" \
+  --cls_thres "${CLS_THRES}" --nms_radius_m "${NMS_RADIUS_M}" \
   --pu_propensity_mode "${PROPENSITY_MODE}" \
   --train_end_ratio 0.8 --eval_start_ratio 0.8 --eval_end_ratio 0.9 \
   --devices "${DEVICES}" --batch_size "${BATCH_SIZE}" \
