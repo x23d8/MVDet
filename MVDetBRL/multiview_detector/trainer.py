@@ -71,7 +71,8 @@ class PerspectiveTrainer(BaseTrainer):
             data, map_gt, imgs_gt, _ = batch[:4]
             pseudo_target, pseudo_weight = batch[4:6] if len(batch) >= 6 else (None, None)
             optimizer.zero_grad()
-            map_res, imgs_res = self.model(data)
+            map_res, imgs_res = (self.model(data, frames=batch[3])
+                                 if getattr(self.model, 'requires_frames', False) else self.model(data))
             t_f = time.time()
             t_forward += t_f - t_b
             base_loss, pseudo_loss = self._loss_components(
@@ -131,7 +132,8 @@ class PerspectiveTrainer(BaseTrainer):
         for batch_idx, batch in enumerate(data_loader):
             data, map_gt, imgs_gt, frame = batch[:4]
             with torch.no_grad():
-                map_res, imgs_res = self.model(data)
+                map_res, imgs_res = (self.model(data, frames=frame)
+                                     if getattr(self.model, 'requires_frames', False) else self.model(data))
             if res_fpath is not None:
                 map_grid_res = map_res.detach().cpu().squeeze()
                 v_s = map_grid_res[map_grid_res > self.cls_thres].unsqueeze(1)

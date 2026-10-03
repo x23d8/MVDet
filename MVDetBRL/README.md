@@ -166,3 +166,60 @@ flags above to the VGGT command if both are wanted. VGGT uses the original
 dataset calibration for MVDet projection. It does not replace calibration with
 VGGT's camera predictions. The checkpoint's [license](https://github.com/facebookresearch/vggt/blob/main/LICENSE.txt)
 applies to its weights.
+
+For BRL + VGGT without pseudo labels, use the VGGT command above without
+`--use_pseudo_labels`, `--pseudo_cache`, or `--pseudo_method`. In the notebook,
+set `CONFIG["ARCH"] = "vggt"` and `CONFIG["USE_PSEUDO_LABELS"] = False`.
+This skips YOLO installation, cache generation, and pseudo evaluation.
+
+### Detic detector checkpoint as a frozen encoder
+
+`--arch detic` loads the official [Detic R50 COCO + ImageNet-21K
+checkpoint](https://dl.fbaipublicfiles.com/detic/Detic_LCOCOI21k_CLIP_R5021k_640b32_4x_ft4x_max-size.pth)
+(`Detic_LCOCOI21k_CLIP_R5021k_640b32_4x_ft4x_max-size.pth`). Its FPN
+backbone is frozen; a 1×1 adapter, MVDet's per-view heads, and the BEV head
+are trained. This uses the detector-trained image features, **not** Detic's
+ROI boxes or classification predictions. The COCO-inclusive checkpoint was
+chosen because its training includes the person class.
+
+Install [Detectron2](https://detectron2.readthedocs.io/tutorials/install.html)
+for your PyTorch/CUDA build, then clone [Detic](https://github.com/facebookresearch/Detic)
+with its CenterNet2 submodule and install its requirements. The checkpoint is
+downloaded by Detectron2 on first use, or supply `--detic_weights` with a
+local file. `--detic_input_width` defaults to 640; `--detic_feature` defaults
+to FPN level `p2`.
+
+```bash
+git clone --recurse-submodules https://github.com/facebookresearch/Detic.git
+python main.py -d wildtrack --data_path ~/Data/Wildtrack --arch detic \
+  --detic_root /path/to/Detic --loss brl --drop_ratio 60
+```
+
+### MV2GF style DA3 feature fusion and pointmap aggregation
+
+`--arch mv2gf` uses frozen [Depth Anything 3](https://github.com/ByteDance-Seed/Depth-Anything-3)
+features and predicted depth, plus trainable ResNet18 task features. The
+`generate_da3_cache.py` script supplies the original calibrated camera poses
+to DA3, saves four transformer layers, and backprojects its depth to 3D world
+pointmaps in metres. The model fuses these features and max-pools them into
+four 0.5 m height slices before the BEV head. Missing or malformed cache files
+raise an error. For Wildtrack, calibration units are converted from cm to m.
+
+This adapts MV2GF's TGF and FPA to the existing MVDet/BRL dense heatmap
+pipeline. It is **not** a reproduction of the paper's focal loss and offset
+head. The [official MV2GF code](https://github.com/Yamameeee/MV2GF) currently
+provides a one-sequence GMVD example and precomputes DA3 outputs; its reported
+Wildtrack scores are not directly comparable to this training recipe.
+
+```bash
+pip install -e /path/to/Depth-Anything-3
+python generate_da3_cache.py --dataset wildtrack --data_path ~/Data/Wildtrack \
+  --output_dir /path/to/da3_cache
+python main.py -d wildtrack --data_path ~/Data/Wildtrack --arch mv2gf \
+  --da3_cache /path/to/da3_cache --loss brl --drop_ratio 60
+```
+
+Both branches require `--variant default`. The notebook
+`mvdet-yolo26x-pseudo.ipynb` exposes `CONFIG["ARCH"] = "detic"` or `"mv2gf"`
+and optionally combines either with the existing YOLO pseudo-label loss.
+Large official weights and generated caches are not stored in this repository.
