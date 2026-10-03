@@ -151,7 +151,7 @@ def main(args):
 
     trainer = PerspectiveTrainer(model, criterion, logdir, denormalize, args.cls_thres, args.alpha,
                                  args.pseudo_loss_weight if args.use_pseudo_labels else 0.0,
-                                 args.pseudo_method)
+                                 args.pseudo_method, max_grad_norm=args.max_grad_norm)
 
     # learn
     if args.resume is None:
@@ -214,6 +214,8 @@ if __name__ == '__main__':
                         help='input batch size for training (default: 1)')
     parser.add_argument('--epochs', type=int, default=10, metavar='N', help='number of epochs to train (default: 10)')
     parser.add_argument('--lr', type=float, default=0.1, metavar='LR', help='learning rate (default: 0.1)')
+    parser.add_argument('--max_grad_norm', type=float, default=None,
+                        help='clip trainable gradients to this global norm; fail on non-finite gradients')
     parser.add_argument('--weight_decay', type=float, default=5e-4)
     parser.add_argument('--momentum', type=float, default=0.5, metavar='M', help='SGD momentum (default: 0.5)')
     parser.add_argument('--log_interval', type=int, default=10, metavar='N',

@@ -190,13 +190,18 @@ dictionary model configs and `build_model_with_cfg(default_cfg=...)` API.
 The checkpoint is downloaded by Detectron2 on first use, or supply `--detic_weights` with a
 local file. `--detic_input_width` defaults to 640; `--detic_feature` defaults
 to FPN level `p3` (the earliest FPN level in this checkpoint's configuration).
+For Detic experiments, start with `--lr 0.01 --max_grad_norm 5`: its adapter
+and MVDet heads are newly initialized, and the original `0.1` learning rate
+can destabilize them. Training now stops at the first non-finite loss or
+gradient and reports the frame, batch, learning rate, and affected tensors.
 
 ```bash
 git clone --recurse-submodules https://github.com/facebookresearch/Detic.git
 pip install -r Detic/requirements.txt
 pip install --no-deps timm==0.5.4
 python main.py -d wildtrack --data_path ~/Data/Wildtrack --arch detic \
-  --detic_root /path/to/Detic --loss brl --drop_ratio 60
+  --detic_root /path/to/Detic --loss brl --drop_ratio 60 \
+  --lr 0.01 --max_grad_norm 5
 ```
 
 ### MV2GF style DA3 feature fusion and pointmap aggregation

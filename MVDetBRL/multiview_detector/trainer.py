@@ -1,4 +1,5 @@
 import time
+import math
 import torch
 import os
 import numpy as np
@@ -19,7 +20,7 @@ class BaseTrainer(object):
 
 class PerspectiveTrainer(BaseTrainer):
     def __init__(self, model, criterion, logdir, denormalize, cls_thres=0.4, alpha=1.0,
-                 pseudo_loss_weight=0.01, pseudo_method='disk'):
+                 pseudo_loss_weight=0.01, pseudo_method='disk', max_grad_norm=None):
         super(BaseTrainer, self).__init__()
         self.model = model
         self.criterion = criterion
@@ -29,6 +30,9 @@ class PerspectiveTrainer(BaseTrainer):
         self.alpha = alpha
         self.pseudo_loss_weight = float(pseudo_loss_weight)
         self.pseudo_method = pseudo_method
+        if max_grad_norm is not None and (not math.isfinite(max_grad_norm) or max_grad_norm <= 0):
+            raise ValueError('max_grad_norm must be positive and finite')
+        self.max_grad_norm = max_grad_norm
 
     def _loss_components(self, map_res, map_gt, imgs_res, imgs_gt, dataset,
                          pseudo_target=None, pseudo_weight=None):
@@ -79,7 +83,30 @@ class PerspectiveTrainer(BaseTrainer):
                 map_res, map_gt, imgs_res, imgs_gt, data_loader.dataset,
                 pseudo_target, pseudo_weight)
             loss = base_loss + pseudo_loss
+            if not torch.isfinite(loss).item():
+                tensors = [('images', data), ('map target', map_gt), ('map output', map_res),
+                           ('base loss', base_loss), ('pseudo loss', pseudo_loss)]
+                tensors += [(f'view {i} target', target) for i, target in enumerate(imgs_gt)]
+                tensors += [(f'view {i} output', output) for i, output in enumerate(imgs_res)]
+                bad = [name for name, value in tensors if not torch.isfinite(value).all().item()]
+                raise FloatingPointError(
+                    f'Non-finite training loss at epoch {epoch}, batch {batch_idx + 1}, '
+                    f'frame {batch[3].tolist()}, lr {optimizer.param_groups[0]["lr"]:.3g}; '
+                    f'non-finite tensors: {bad}')
             loss.backward()
+            try:
+                torch.nn.utils.clip_grad_norm_(
+                    self.model.parameters(),
+                    self.max_grad_norm if self.max_grad_norm is not None else float('inf'),
+                    error_if_nonfinite=True)
+            except RuntimeError as exc:
+                bad = [name for name, parameter in self.model.named_parameters()
+                       if parameter.grad is not None and
+                       not torch.isfinite(parameter.grad).all().item()]
+                raise FloatingPointError(
+                    f'Non-finite gradient at epoch {epoch}, batch {batch_idx + 1}, '
+                    f'frame {batch[3].tolist()}, lr {optimizer.param_groups[0]["lr"]:.3g}; '
+                    f'parameters: {bad or "gradient norm overflow"}') from exc
             optimizer.step()
             losses += loss.item()
             base_losses += base_loss.item()
