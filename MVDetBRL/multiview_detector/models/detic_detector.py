@@ -17,7 +17,7 @@ DETIC_WEIGHTS = ('https://dl.fbaipublicfiles.com/detic/'
 
 
 class DeticDetector(PerspTransDetector):
-    def __init__(self, dataset, root, weights=None, feature='p2', input_width=640):
+    def __init__(self, dataset, root, weights=None, feature='p3', input_width=640):
         if input_width <= 0:
             raise ValueError('detic_input_width must be positive')
         if not root:
@@ -56,10 +56,11 @@ class DeticDetector(PerspTransDetector):
         cfg.MODEL.ROI_BOX_HEAD.CAT_FREQ_PATH = str(root / cfg.MODEL.ROI_BOX_HEAD.CAT_FREQ_PATH)
         cfg.freeze()
         detector = build_model(cfg).eval()
+        available_features = detector.backbone.output_shape()
+        if feature not in available_features:
+            raise ValueError(f'Unknown Detic FPN feature {feature!r}; choose from {list(available_features)}')
         DetectionCheckpointer(detector).load(str(weights or DETIC_WEIGHTS))
-        if feature not in detector.backbone.output_shape():
-            raise ValueError(f'Unknown Detic FPN feature {feature!r}; choose from {list(detector.backbone.output_shape())}')
-        channels = detector.backbone.output_shape()[feature].channels
+        channels = available_features[feature].channels
         self.backbone = detector.backbone.requires_grad_(False).eval()
         self.adapter = nn.Conv2d(channels, 512, 1).to('cuda:0')
         self.feature = feature

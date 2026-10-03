@@ -189,7 +189,7 @@ after the Detic requirements: Detic's backbone code expects that release's
 dictionary model configs and `build_model_with_cfg(default_cfg=...)` API.
 The checkpoint is downloaded by Detectron2 on first use, or supply `--detic_weights` with a
 local file. `--detic_input_width` defaults to 640; `--detic_feature` defaults
-to FPN level `p2`.
+to FPN level `p3` (the earliest FPN level in this checkpoint's configuration).
 
 ```bash
 git clone --recurse-submodules https://github.com/facebookresearch/Detic.git
