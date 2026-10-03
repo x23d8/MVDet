@@ -1,5 +1,6 @@
 import os
 import json
+from scipy.ndimage import distance_transform_edt
 from scipy.stats import multivariate_normal
 from PIL import Image
 from scipy.sparse import coo_matrix
@@ -13,7 +14,8 @@ class frameDataset(VisionDataset):
     def __init__(self, base, train=True, transform=ToTensor(), target_transform=ToTensor(),
                  reID=False, grid_reduce=4, img_reduce=4, train_ratio=0.9, force_download=True,
                  drop_ratio=0, pseudo_cache=None, pseudo_conf_threshold=0.2,
-                 pseudo_sigma_m=0.5, pseudo_suppress_radius_m=1.0):
+                 pseudo_sigma_m=0.5, pseudo_suppress_radius_m=1.0,
+                 pseudo_method='disk'):
         super().__init__(base.root, transform=transform, target_transform=target_transform)
 
         map_sigma, map_kernel_size = 20 / grid_reduce, 20
@@ -28,6 +30,9 @@ class frameDataset(VisionDataset):
         self.pseudo_sigma_m = float(pseudo_sigma_m)
         self.pseudo_suppress_radius_m = float(pseudo_suppress_radius_m)
         self.pseudo_conf_threshold = float(pseudo_conf_threshold)
+        if pseudo_method not in ('disk', 'gaussian'):
+            raise ValueError('pseudo_method must be disk or gaussian')
+        self.pseudo_method = pseudo_method
         if pseudo_cache:
             with open(pseudo_cache, 'r') as cache_file:
                 cache_data = json.load(cache_file)
@@ -182,6 +187,8 @@ class frameDataset(VisionDataset):
 
     def _build_pseudo_targets(self, frame, map_gt):
         """Project cached person foot points and rasterize soft BEV evidence."""
+        if self.pseudo_method == 'gaussian':
+            return self._build_gaussian_pseudo_targets(frame, map_gt)
         height, width = self.reducedgrid_shape
         pseudo_target = np.zeros((height, width), dtype=np.float32)
         pseudo_weight = np.zeros((height, width), dtype=np.float32)
@@ -258,6 +265,74 @@ class frameDataset(VisionDataset):
 
         return (torch.from_numpy(pseudo_target).unsqueeze(0),
                 torch.from_numpy(pseudo_weight).unsqueeze(0))
+
+    def _build_gaussian_pseudo_targets(self, frame, map_gt):
+        """Notebook Gaussian driver: max-combine confidence-weighted foot evidence."""
+        height, width = self.reducedgrid_shape
+        target = np.zeros((height, width), dtype=np.float32)
+        weight = np.zeros_like(target)
+        frame_detections = self.pseudo_cache.get(str(frame), {}) if self.pseudo_cache is not None else {}
+        if not isinstance(frame_detections, dict):
+            return torch.from_numpy(target)[None], torch.from_numpy(weight)[None]
+
+        cell_size_m = 0.025 * self.grid_reduce
+        sigma_cells = max(self.pseudo_sigma_m / cell_size_m, 0.5)
+        suppress_cells = self.pseudo_suppress_radius_m / cell_size_m
+        radius = max(int(np.ceil(3.0 * sigma_cells)), 1)
+        gt_occupied = map_gt.detach().cpu().numpy().squeeze() > 0
+        gt_suppressed = (distance_transform_edt(~gt_occupied) <= suppress_cells
+                         if gt_occupied.any() else np.zeros((height, width), dtype=bool))
+
+        for camera_key, boxes in frame_detections.items():
+            try:
+                camera = int(camera_key)
+            except (TypeError, ValueError):
+                continue
+            if camera < 0 or camera >= self.num_cam or not isinstance(boxes, list):
+                continue
+            image_points, scores = [], []
+            for detection in boxes:
+                if isinstance(detection, dict):
+                    box = detection.get('bbox', detection.get('box'))
+                    score = float(detection.get('confidence', detection.get('score', 0.0)))
+                else:
+                    if not isinstance(detection, (list, tuple)) or len(detection) < 5:
+                        continue
+                    box, score = detection[:4], float(detection[4])
+                if box is None or score < self.pseudo_conf_threshold:
+                    continue
+                x1, y1, x2, y2 = map(float, box)
+                if not np.isfinite([x1, y1, x2, y2, score]).all() or x2 <= x1 or y2 <= y1:
+                    continue
+                image_points.append([(x1 + x2) * 0.5, y2])
+                scores.append(float(np.clip(score, 0.0, 1.0)))
+            if not image_points:
+                continue
+
+            world_points = get_worldcoord_from_imagecoord(
+                np.asarray(image_points, dtype=np.float64).T,
+                self.base.intrinsic_matrices[camera], self.base.extrinsic_matrices[camera])
+            grid_points = self.base.get_worldgrid_from_worldcoord(world_points)
+            for point_index, score in enumerate(scores):
+                grid_x, grid_y = grid_points[:, point_index]
+                if self.base.indexing == 'xy':
+                    col, row = int(grid_x / self.grid_reduce), int(grid_y / self.grid_reduce)
+                else:
+                    row, col = int(grid_x / self.grid_reduce), int(grid_y / self.grid_reduce)
+                if not (0 <= row < height and 0 <= col < width) or gt_suppressed[row, col]:
+                    continue
+
+                y0, y1 = max(0, row - radius), min(height, row + radius + 1)
+                x0, x1 = max(0, col - radius), min(width, col + radius + 1)
+                patch_rows, patch_cols = np.ogrid[y0:y1, x0:x1]
+                distance_sq = (patch_rows - row) ** 2 + (patch_cols - col) ** 2
+                gaussian = np.exp(-distance_sq / (2.0 * sigma_cells ** 2)).astype(np.float32)
+                support = (distance_sq <= radius ** 2) & ~gt_suppressed[y0:y1, x0:x1]
+                gaussian *= support
+                np.maximum(target[y0:y1, x0:x1], gaussian, out=target[y0:y1, x0:x1])
+                np.maximum(weight[y0:y1, x0:x1], score * gaussian, out=weight[y0:y1, x0:x1])
+
+        return torch.from_numpy(target)[None], torch.from_numpy(weight)[None]
 
     def __len__(self):
         return len(self.map_gt.keys())

@@ -59,9 +59,7 @@ class PerspTransDetector(nn.Module):
         assert N == self.num_cam
         world_features = []
         imgs_result = []
-        for cam in range(self.num_cam):
-            img_feature = self.base_pt1(imgs[:, cam].to('cuda:0'))
-            img_feature = self.base_pt2(img_feature.to('cuda:0'))
+        for cam, img_feature in enumerate(self._encode_images(imgs)):
             img_feature = F.interpolate(img_feature, self.upsample_shape, mode='bilinear')
             img_res = self.img_classifier(img_feature.to('cuda:0'))
             imgs_result.append(img_res)
@@ -85,6 +83,13 @@ class PerspTransDetector(nn.Module):
             plt.imshow(torch.norm(map_result[0].detach(), dim=0).cpu().numpy())
             plt.show()
         return map_result, imgs_result
+
+    def _encode_images(self, imgs):
+        features = []
+        for cam in range(self.num_cam):
+            feature = self.base_pt1(imgs[:, cam].to('cuda:0'))
+            features.append(self.base_pt2(feature))
+        return features
 
     def get_imgcoord2worldgrid_matrices(self, intrinsic_matrices, extrinsic_matrices, worldgrid2worldcoord_mat):
         projection_matrices = {}

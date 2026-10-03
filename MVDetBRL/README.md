@@ -123,3 +123,46 @@ python main.py -d wildtrack --data_path ~/Data/Wildtrack --drop_ratio 60 --loss 
 ```
 
 The cache generator defaults to `yolo26s.pt`, COCO person class, and confidence 0.20. The evaluator excludes projections outside the BEV, reports per-camera metrics, and estimates cross-view fusion with a 0.5 m NMS radius. It compares points with full annotations at 0.5 m, 1 m, and 2 m matching radii. Training defaults are pseudo loss weight 0.01, BEV Gaussian sigma 0.5 m, and GT suppression radius 1 m. Training logs report base and weighted pseudo loss separately. The cache is dataset-specific; generate a separate one for MultiviewX. Cache output should be kept outside version control when it contains all detections.
+
+### Gaussian YOLO pseudo supervision
+
+The notebook's Gaussian driver is now available in the source. Select it with
+`--pseudo_method gaussian` alongside `--use_pseudo_labels --pseudo_cache ...`.
+It uses the maximum Gaussian heatmap from projected YOLO foot points, suppresses
+evidence near real annotations, and divides weighted MSE by the sum of pseudo
+weights. `disk` remains the default for existing runs. The notebook
+`mvdet-yolo26x-pseudo.ipynb` passes these options to `main.py` directly.
+
+```bash
+python main.py -d wildtrack --data_path ~/Data/Wildtrack --drop_ratio 60 \
+  --loss brl --use_pseudo_labels --pseudo_cache pseudo_cache/wildtrack_yolo26x.json \
+  --pseudo_method gaussian --pseudo_suppress_radius_m 0.5
+```
+
+### Frozen VGGT encoder
+
+Install the [official VGGT repository](https://github.com/facebookresearch/vggt)
+and `huggingface_hub`. `--arch vggt` downloads the official
+[`facebook/VGGT-1B` checkpoint](https://huggingface.co/facebook/VGGT-1B) on
+first use. Use `--vggt_weights /path/to/model.pt` for a local copy of the same
+checkpoint. The VGGT aggregator processes all cameras together; its weights are
+frozen, and only the new feature adapter, per-camera head and BEV head train.
+Images keep their full field of view and aspect ratio. `--vggt_input_width`
+controls the encoder resolution (default 518, multiple of 14). The VGGT path
+requires `--variant default` and a CUDA GPU with substantial memory.
+
+```bash
+pip install huggingface_hub einops safetensors
+pip install --no-deps git+https://github.com/facebookresearch/vggt.git
+```
+
+```bash
+python main.py -d wildtrack --data_path ~/Data/Wildtrack --arch vggt \
+  --variant default --loss brl --drop_ratio 60
+```
+
+The encoder choice and pseudo method are independent; add the Gaussian pseudo
+flags above to the VGGT command if both are wanted. VGGT uses the original
+dataset calibration for MVDet projection. It does not replace calibration with
+VGGT's camera predictions. The checkpoint's [license](https://github.com/facebookresearch/vggt/blob/main/LICENSE.txt)
+applies to its weights.

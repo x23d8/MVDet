@@ -18,6 +18,7 @@ from multiview_detector.models.persp_trans_detector import PerspTransDetector
 from multiview_detector.models.image_proj_variant import ImageProjVariant
 from multiview_detector.models.res_proj_variant import ResProjVariant
 from multiview_detector.models.no_joint_conv_variant import NoJointConvVariant
+from multiview_detector.models.vggt_detector import VGGTDetector
 from multiview_detector.utils.logger import Logger
 from multiview_detector.utils.draw_curve import draw_curve
 from multiview_detector.utils.image_utils import img_color_denormalize
@@ -60,6 +61,8 @@ def main(args):
     else:
         raise Exception('must choose from [wildtrack, multiviewx]')
 
+    if args.pseudo_method == 'gaussian' and not args.use_pseudo_labels:
+        raise ValueError('--pseudo_method gaussian requires --use_pseudo_labels and --pseudo_cache')
     if args.use_pseudo_labels and not args.pseudo_cache:
         raise ValueError('--use_pseudo_labels requires --pseudo_cache')
     train_set = frameDataset(
@@ -67,7 +70,8 @@ def main(args):
         pseudo_cache=args.pseudo_cache if args.use_pseudo_labels else None,
         pseudo_conf_threshold=args.pseudo_conf_threshold,
         pseudo_sigma_m=args.pseudo_sigma_m,
-        pseudo_suppress_radius_m=args.pseudo_suppress_radius_m)
+        pseudo_suppress_radius_m=args.pseudo_suppress_radius_m,
+        pseudo_method=args.pseudo_method)
     test_set = frameDataset(base, train=False, transform=train_trans, grid_reduce=4, drop_ratio=args.drop_ratio)
 
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True,
@@ -76,7 +80,12 @@ def main(args):
                                               num_workers=args.num_workers, pin_memory=True)
 
     # model
-    if args.variant == 'default':
+    if args.arch == 'vggt':
+        if args.variant != 'default':
+            raise ValueError('--arch vggt requires --variant default')
+        model = VGGTDetector(train_set, weights=args.vggt_weights,
+                             input_width=args.vggt_input_width)
+    elif args.variant == 'default':
         model = PerspTransDetector(train_set, args.arch)
     elif args.variant == 'img_proj':
         model = ImageProjVariant(train_set, args.arch)
@@ -87,7 +96,8 @@ def main(args):
     else:
         raise Exception('no support for this variant')
 
-    optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+    optimizer = optim.SGD((p for p in model.parameters() if p.requires_grad),
+                          lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.OneCycleLR(optimizer, max_lr=args.lr, steps_per_epoch=len(train_loader),
                                                     epochs=args.epochs)
 
@@ -105,8 +115,11 @@ def main(args):
     if args.use_pseudo_labels:
         loss_tag += (f'_pseudo_w{args.pseudo_loss_weight:g}_c{args.pseudo_conf_threshold:g}'
                      f'_s{args.pseudo_sigma_m:g}_r{args.pseudo_suppress_radius_m:g}')
-    logdir = f'logs/{args.dataset}_frame/{drop_tag}/{loss_tag}/{args.variant}/' + datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S') \
-        if not args.resume else f'logs/{args.dataset}_frame/{drop_tag}/{loss_tag}/{args.variant}/{args.resume}'
+        if args.pseudo_method == 'gaussian':
+            loss_tag += '_gaussian'
+    model_tag = args.variant if args.arch != 'vggt' else f'{args.variant}_vggt'
+    logdir = f'logs/{args.dataset}_frame/{drop_tag}/{loss_tag}/{model_tag}/' + datetime.datetime.today().strftime('%Y-%m-%d_%H-%M-%S') \
+        if not args.resume else f'logs/{args.dataset}_frame/{drop_tag}/{loss_tag}/{model_tag}/{args.resume}'
     if args.resume is None:
         os.makedirs(logdir, exist_ok=True)
         copy_tree('./multiview_detector', logdir + '/scripts/multiview_detector')
@@ -127,7 +140,8 @@ def main(args):
     test_moda_s = []
 
     trainer = PerspectiveTrainer(model, criterion, logdir, denormalize, args.cls_thres, args.alpha,
-                                 args.pseudo_loss_weight if args.use_pseudo_labels else 0.0)
+                                 args.pseudo_loss_weight if args.use_pseudo_labels else 0.0,
+                                 args.pseudo_method)
 
     # learn
     if args.resume is None:
@@ -152,7 +166,7 @@ def main(args):
             # save
             torch.save(model.state_dict(), os.path.join(logdir, 'MultiviewDetector.pth'))
     else:
-        resume_dir = f'logs/{args.dataset}_frame/{drop_tag}/{loss_tag}/{args.variant}/' + args.resume
+        resume_dir = f'logs/{args.dataset}_frame/{drop_tag}/{loss_tag}/{model_tag}/' + args.resume
         resume_fname = resume_dir + '/MultiviewDetector.pth'
         model.load_state_dict(torch.load(resume_fname))
         model.eval()
@@ -168,7 +182,11 @@ if __name__ == '__main__':
     parser.add_argument('--alpha', type=float, default=1.0, help='ratio for per view loss')
     parser.add_argument('--variant', type=str, default='default',
                         choices=['default', 'img_proj', 'res_proj', 'no_joint_conv'])
-    parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18'])
+    parser.add_argument('--arch', type=str, default='resnet18', choices=['vgg11', 'resnet18', 'vggt'])
+    parser.add_argument('--vggt_weights', type=str, default=None,
+                        help='local official VGGT model.pt; downloads facebook/VGGT-1B when omitted')
+    parser.add_argument('--vggt_input_width', type=int, default=518,
+                        help='VGGT input width (multiple of 14); keeps the full camera aspect ratio')
     parser.add_argument('-d', '--dataset', type=str, default='wildtrack', choices=['wildtrack', 'multiviewx'])
     parser.add_argument('--data_path', type=str, default=None, help='Dataset root; defaults to ../Data_temp/<dataset>')
     parser.add_argument('-j', '--num_workers', type=int, default=4)
@@ -207,6 +225,8 @@ if __name__ == '__main__':
     parser.add_argument('--pseudo_conf_threshold', type=float, default=0.2)
     parser.add_argument('--pseudo_sigma_m', type=float, default=0.5)
     parser.add_argument('--pseudo_suppress_radius_m', type=float, default=1.0)
+    parser.add_argument('--pseudo_method', choices=['disk', 'gaussian'], default='disk',
+                        help='gaussian reproduces the notebook soft target and weighted loss')
     args = parser.parse_args()
 
     main(args)

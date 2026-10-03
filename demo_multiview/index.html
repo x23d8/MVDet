@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MVDet Demo | Multi-camera Viewer</title>
+  <link rel="stylesheet" href="/workspace.css">
+</head>
+<body>
+  <header class="workspace-header">
+    <nav class="workspace-navbar" aria-label="Demo controls">
+      <a class="workspace-brand" href="/" aria-label="MVDet Demo home">MVDet DEMO</a>
+      <div class="workspace-actions">
+        <label class="navbar-control" for="dataset"><span>Dataset</span><select id="dataset" aria-label="Dataset"></select></label>
+        <button id="run" class="btn btn-success" type="button">Run inference</button>
+        <button id="play" class="btn btn-default" type="button" aria-label="Play frames">▶ Play</button>
+      </div>
+      <div class="workspace-frame-cluster" aria-label="Frame navigation">
+        <button id="prev" class="btn btn-primary" type="button" aria-label="Previous frame">&lt;</button>
+        <strong class="workspace-frame-id">Frame ID: <span id="frame-label">—</span></strong>
+        <button id="next" class="btn btn-primary" type="button" aria-label="Next frame">&gt;</button>
+      </div>
+    </nav>
+    <div class="inspector-row" aria-label="Model inspector">
+      <strong class="inspector-title">Model Inspector</strong>
+      <label class="inspector-control" for="method"><span>Method</span><select id="method" aria-label="Method"></select></label>
+      <label class="inspector-control" for="weight"><span>Checkpoint</span><select id="weight" aria-label="Checkpoint"></select></label>
+      <label class="frame-slider" for="frame-range"><span>Frame</span><input id="frame-range" type="range" min="0" max="0" value="0"></label>
+      <span id="camera-count" class="camera-count"></span>
+      <span id="model-status" class="model-status" role="status">Select a checkpoint to begin</span>
+    </div>
+  </header>
+
+  <div id="message" class="message" role="alert" hidden></div>
+  <main id="workspace" class="canvas-grid" hidden>
+    <div id="cameras" class="camera-grid"></div>
+    <section class="map-section" aria-label="Occupancy map">
+      <div id="map" class="map" role="group" aria-label="Pedestrian positions on the ground plane">
+        <div class="map-grid"></div>
+        <img id="heatmap" class="heatmap" alt="Model occupancy heatmap" hidden>
+        <span class="camera-label">Ground Plane</span>
+        <span id="node-count" class="map-count">0 nodes</span>
+        <div class="map-axis map-axis-x">X / WORLD GRID</div>
+        <div class="map-axis map-axis-y">Y / WORLD GRID</div>
+        <div id="map-nodes" class="map-nodes"></div>
+      </div>
+    </section>
+    <section id="detail" class="detail" aria-label="Selected node details"></section>
+  </main>
+  <footer class="workspace-footer"><span id="source-note"></span><span>Boxes shown for model nodes are POM projections.</span></footer>
+  <script src="/app.js" defer></script>
+</body>
+</html>

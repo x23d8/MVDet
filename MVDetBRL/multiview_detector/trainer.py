@@ -19,7 +19,7 @@ class BaseTrainer(object):
 
 class PerspectiveTrainer(BaseTrainer):
     def __init__(self, model, criterion, logdir, denormalize, cls_thres=0.4, alpha=1.0,
-                 pseudo_loss_weight=0.01):
+                 pseudo_loss_weight=0.01, pseudo_method='disk'):
         super(BaseTrainer, self).__init__()
         self.model = model
         self.criterion = criterion
@@ -28,6 +28,7 @@ class PerspectiveTrainer(BaseTrainer):
         self.denormalize = denormalize
         self.alpha = alpha
         self.pseudo_loss_weight = float(pseudo_loss_weight)
+        self.pseudo_method = pseudo_method
 
     def _loss_components(self, map_res, map_gt, imgs_res, imgs_gt, dataset,
                          pseudo_target=None, pseudo_weight=None):
@@ -44,8 +45,11 @@ class PerspectiveTrainer(BaseTrainer):
                 target = F.interpolate(target, size=map_res.shape[-2:], mode='bilinear', align_corners=False)
                 weights = F.interpolate(weights, size=map_res.shape[-2:], mode='bilinear', align_corners=False)
             weighted_error = weights * (map_res - target).pow(2)
-            active_count = (weights > 0).sum().clamp(min=1).to(map_res.dtype)
-            pseudo_loss = self.pseudo_loss_weight * weighted_error.sum() / active_count
+            if self.pseudo_method == 'gaussian':
+                denominator = weights.sum().clamp_min(1e-6)
+            else:
+                denominator = (weights > 0).sum().clamp(min=1).to(map_res.dtype)
+            pseudo_loss = self.pseudo_loss_weight * weighted_error.sum() / denominator
         return base_loss, pseudo_loss
 
     def _loss(self, map_res, map_gt, imgs_res, imgs_gt, dataset, pseudo_target=None, pseudo_weight=None):
