@@ -215,8 +215,18 @@ head. The [official MV2GF code](https://github.com/Yamameeee/MV2GF) currently
 provides a one-sequence GMVD example and precomputes DA3 outputs; its reported
 Wildtrack scores are not directly comparable to this training recipe.
 
+The DA3 checkout currently declares `requires-python = ">=3.9, <=3.13"`,
+which excludes Python 3.13 patch releases such as Kaggle's 3.13.15. The
+notebook changes only that line to `>=3.9, <3.14` in its local DA3 checkout
+before installation.
+
+DA3 also imports `addict` without listing it as an installation dependency. The
+notebook installs `addict` and checks the DA3 import before starting cache
+generation.
+
 ```bash
 pip install -e /path/to/Depth-Anything-3
+pip install addict
 python generate_da3_cache.py --dataset wildtrack --data_path ~/Data/Wildtrack \
   --output_dir /path/to/da3_cache
 python main.py -d wildtrack --data_path ~/Data/Wildtrack --arch mv2gf \
@@ -224,6 +234,6 @@ python main.py -d wildtrack --data_path ~/Data/Wildtrack --arch mv2gf \
 ```
 
 Both branches require `--variant default`. The notebook
-`mvdet-yolo26x-pseudo.ipynb` exposes `CONFIG["ARCH"] = "detic"` or `"mv2gf"`
+`mvde_experiments.ipynb` exposes `CONFIG["ARCH"] = "detic"` or `"mv2gf"`
 and optionally combines either with the existing YOLO pseudo-label loss.
 Large official weights and generated caches are not stored in this repository.

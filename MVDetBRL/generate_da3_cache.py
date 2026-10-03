@@ -31,8 +31,10 @@ def backproject(depth, intrinsics, extrinsics):
 def main(args):
     try:
         from depth_anything_3.api import DepthAnything3
-    except ImportError as exc:
-        raise ImportError('Install the official Depth-Anything-3 package before generating the cache') from exc
+    except ModuleNotFoundError as exc:
+        if exc.name == 'depth_anything_3':
+            raise ImportError('Install the official Depth-Anything-3 package before generating the cache') from exc
+        raise ImportError(f'Depth-Anything-3 is missing dependency {exc.name!r}; install it before generating the cache') from exc
     base = Wildtrack(args.data_path) if args.dataset == 'wildtrack' else MultiviewX(args.data_path)
     source = Path(args.data_path) / 'annotations_positions'
     frames = sorted(int(path.stem) for path in source.glob('*.json'))
