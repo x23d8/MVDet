@@ -184,13 +184,17 @@ chosen because its training includes the person class.
 
 Install [Detectron2](https://detectron2.readthedocs.io/tutorials/install.html)
 for your PyTorch/CUDA build, then clone [Detic](https://github.com/facebookresearch/Detic)
-with its CenterNet2 submodule and install its requirements. The checkpoint is
-downloaded by Detectron2 on first use, or supply `--detic_weights` with a
+with its CenterNet2 submodule and install its requirements. Pin `timm==0.5.4`
+after the Detic requirements: Detic's backbone code expects that release's
+dictionary model configs and `build_model_with_cfg(default_cfg=...)` API.
+The checkpoint is downloaded by Detectron2 on first use, or supply `--detic_weights` with a
 local file. `--detic_input_width` defaults to 640; `--detic_feature` defaults
 to FPN level `p2`.
 
 ```bash
 git clone --recurse-submodules https://github.com/facebookresearch/Detic.git
+pip install -r Detic/requirements.txt
+pip install --no-deps timm==0.5.4
 python main.py -d wildtrack --data_path ~/Data/Wildtrack --arch detic \
   --detic_root /path/to/Detic --loss brl --drop_ratio 60
 ```

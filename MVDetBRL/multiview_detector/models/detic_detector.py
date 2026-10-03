@@ -1,5 +1,6 @@
 """MVDet heads on features from an official, frozen Detic detector."""
 
+import inspect
 import sys
 from pathlib import Path
 
@@ -39,6 +40,12 @@ class DeticDetector(PerspTransDetector):
             import detic.modeling  # noqa: F401; register Detic components
         except ImportError as exc:
             raise ImportError('Detic needs detectron2 and the official Detic repository with CenterNet2 submodule') from exc
+        from timm.models.helpers import build_model_with_cfg
+        from timm.models.resnet import default_cfgs as resnet_cfgs
+        if (not isinstance(resnet_cfgs.get('resnet50'), dict) or
+                'default_cfg' not in inspect.signature(build_model_with_cfg).parameters):
+            raise RuntimeError('This Detic checkout requires timm==0.5.4; install it with '
+                               '`python -m pip install --no-deps timm==0.5.4` and restart the Python process')
         cfg = get_cfg()
         add_centernet_config(cfg)
         add_detic_config(cfg)
